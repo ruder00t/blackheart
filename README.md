@@ -32,6 +32,13 @@ All state is plain JSON under `data/` (`vars.json`, `library.json`, etc.).
 Back up or move machines by copying that folder. The Additions tab also has
 explicit Export/Import JSON buttons.
 
+## Install
+
+   git clone https://github.com/ruder00t/blackheart.git
+   cd blackheart
+   ./install.sh      # Linux/macOS
+   ./run.sh          # then open http://127.0.0.1:8090
+
 ## What `install.sh` installs
 
 It creates a Python virtualenv (`.venv`) and installs:
@@ -86,8 +93,10 @@ command execution wired to the web app. They are **localhost-only** and refuse
 any non-loopback request (403). `ttyd` is likewise bound to `127.0.0.1`. Do not
 expose Blackheart or ttyd's port on a routable interface.
 
-Run with `./run.sh` (Linux/macOS) or `run.bat` (Windows), then open
+Run with `./run.sh` (Linux/macOS), then open
 `http://127.0.0.1:8090`.
+
+`tmux attach` connects your kali terminal to the blackheart terminals.
 
 ## Usage — variables
 
@@ -119,12 +128,11 @@ playbook; those are local to that tab and not part of the shared set above.
 
 ![Blackheart interface](screenshots/screenshot1.png)
 
-Tips and Tricks:
-`tmux attach` in kali terminal binds the web-terminals to your actual terminals
-
 Thanks a ton to:
 - Hacktricks (hacktricks.wiki)
 - Lolbas (lolbas-project.github.io)
-- GTFObins (gtfobins.org)
+- GTFObins (gtfobins.github.io)
 - Revshells (revshells.com)
-- Cyberchef (gchq.github.io/CyberChef)
+- CyberChef (gchq.github.io/CyberChef)
+
+## License\nMIT
