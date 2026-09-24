@@ -12,6 +12,10 @@ cheat-sheets, command templates, and small utilities into one tabbed interface,
 with a shared set of engagement variables that substitute live into every
 command.
 
+==Please note==
+Blackheart is still in development. Any suggestions and ideas for additions are greatly appreciated.
+=============== 
+
 It contains ~40 tabs grouped by engagement phase:
 
 - **Engagement** — variables/home, wordlists, OSINT
@@ -114,3 +118,13 @@ CheckMap additionally uses per-scan `$IP` / `$PORT` inside a single service
 playbook; those are local to that tab and not part of the shared set above.
 
 ![Blackheart interface](screenshots/screenshot1.png)
+
+Tips and Tricks:
+`tmux attach` in kali terminal binds the web-terminals to your actual terminals
+
+Thanks a ton to:
+Hacktricks (hacktricks.wiki)
+Lolbas (lolbas-project.github.io)
+GTFObins (gtfobins.org)
+Revshells (revshells.com)
+Cyberchef (gchq.github.io/CyberChef)
