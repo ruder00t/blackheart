@@ -4,7 +4,7 @@
   <img src="screenshots/blackheartlogo.png" width="300" alt="Blackheart logo">
 </p>
 
-## What it is
+## What it is; built for convenience
 
 Blackheart is an offline pentest command kit: a local Flask app that binds to
 `127.0.0.1:8090` and makes no external calls at runtime. It collects
@@ -12,9 +12,8 @@ cheat-sheets, command templates, and small utilities into one tabbed interface,
 with a shared set of engagement variables that substitute live into every
 command.
 
-==Please note==
-Blackheart is still in development. Any suggestions and ideas for additions are greatly appreciated.
-=============== 
+> [!NOTE]
+> Blackheart is still in development. Suggestions and ideas for additions are welcome.
 
 It contains ~40 tabs grouped by engagement phase:
 
@@ -135,4 +134,4 @@ Thanks a ton to:
 - Revshells (revshells.com)
 - CyberChef (gchq.github.io/CyberChef)
 
-## License\nMIT
+## License\nMIT — see [LICENSE](LICENSE).
