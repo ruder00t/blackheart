@@ -7,7 +7,7 @@ data/day0.json
 data/additions.json
 data/library.json
 app/static/hacktricks/
-hacktricks/
+/hacktricks/
 
 # ttyd static binary fetched by install.sh
 bin/
