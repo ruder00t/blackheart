@@ -1,5 +1,9 @@
 # Blackheart
 
+<p align="center">
+  <img src="screenshots/blackheartlogo.png" width="300" alt="Blackheart logo">
+</p>
+
 ## What it is
 
 Blackheart is an offline pentest command kit: a local Flask app that binds to
@@ -108,3 +112,5 @@ tab substitutes them live (`$RHOST`, `$LHOST`, …). Values persist in
 
 CheckMap additionally uses per-scan `$IP` / `$PORT` inside a single service
 playbook; those are local to that tab and not part of the shared set above.
+
+![Blackheart interface](screenshots/screenshot1.png)
