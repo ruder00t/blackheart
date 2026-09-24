@@ -123,8 +123,8 @@ Tips and Tricks:
 `tmux attach` in kali terminal binds the web-terminals to your actual terminals
 
 Thanks a ton to:
-Hacktricks (hacktricks.wiki)
-Lolbas (lolbas-project.github.io)
-GTFObins (gtfobins.org)
-Revshells (revshells.com)
-Cyberchef (gchq.github.io/CyberChef)
+- Hacktricks (hacktricks.wiki)
+- Lolbas (lolbas-project.github.io)
+- GTFObins (gtfobins.org)
+- Revshells (revshells.com)
+- Cyberchef (gchq.github.io/CyberChef)
