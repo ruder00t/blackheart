@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>Nmap builder <span class="tag">recon</span></h2>
+    <p>Pick options &mdash; the command builds live against <code>$RHOST</code>. Copy the line at the bottom.
+       For deep service work, feed the <code>-oA</code> output into CheckMap.</p>
+  </div>
+
+  <div class="card">
+    <h3>Scan type</h3>
+    <div class="row">
+      <div class="field"><label>Technique</label>
+        <select id="nmScan">
+          <option value="-sS">-sS · SYN (default, needs root)</option>
+          <option value="-sT">-sT · TCP connect (no root)</option>
+          <option value="-sU">-sU · UDP</option>
+          <option value="-sS -sU">-sS -sU · TCP+UDP</option>
+          <option value="-sn">-sn · ping sweep (no ports)</option>
+          <option value="-sA">-sA · ACK (firewall mapping)</option>
+        </select>
+      </div>
+      <div class="field"><label>Timing</label>
+        <select id="nmTiming">
+          <option value="-T4" selected>-T4 · aggressive</option>
+          <option value="-T3">-T3 · normal</option>
+          <option value="-T2">-T2 · polite</option>
+          <option value="-T5">-T5 · insane</option>
+          <option value="">(none)</option>
+        </select>
+      </div>
+      <div class="field"><label>Min rate</label>
+        <select id="nmRate">
+          <option value="">(none)</option>
+          <option value="--min-rate 1000">--min-rate 1000</option>
+          <option value="--min-rate 5000">--min-rate 5000</option>
+          <option value="--min-rate 10000">--min-rate 10000</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Ports</h3>
+    <div class="row">
+      <div class="field"><label>Range</label>
+        <select id="nmPortMode">
+          <option value="">top 1000 (default)</option>
+          <option value="-p-">-p- · all 65535</option>
+          <option value="--top-ports 100">--top-ports 100</option>
+          <option value="-F">-F · fast (top 100)</option>
+          <option value="custom">custom&hellip;</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1"><label>Custom <code>-p</code></label>
+        <input type="text" id="nmPorts" placeholder="22,80,443,8080 or 1-1000" disabled>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Detection &amp; scripts</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:14px 22px">
+      <label class="chip"><input type="checkbox" id="nmSV" checked><span>-sV version</span></label>
+      <label class="chip"><input type="checkbox" id="nmSC"><span>-sC default scripts</span></label>
+      <label class="chip"><input type="checkbox" id="nmO"><span>-O OS detect</span></label>
+      <label class="chip"><input type="checkbox" id="nmA"><span>-A aggressive (=-sV -sC -O --traceroute)</span></label>
+      <label class="chip"><input type="checkbox" id="nmPn" checked><span>-Pn skip host discovery</span></label>
+      <label class="chip"><input type="checkbox" id="nmN"><span>-n no DNS</span></label>
+      <label class="chip"><input type="checkbox" id="nmv"><span>-v verbose</span></label>
+      <label class="chip"><input type="checkbox" id="nmReason"><span>--reason</span></label>
+      <label class="chip"><input type="checkbox" id="nmOpen" checked><span>--open</span></label>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div class="field" style="flex:1"><label>NSE scripts (<code>--script</code>)</label>
+        <input type="text" id="nmScript" placeholder="vuln  ·  http-enum  ·  smb-enum-shares,smb-vuln*  ·  safe">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Output</h3>
+    <div class="row">
+      <div class="field"><label>Save (<code>-oA</code>)</label>
+        <select id="nmOut">
+          <option value="">(none)</option>
+          <option value="-oA nmap/initial" selected>-oA nmap/initial</option>
+          <option value="-oN nmap/scan.txt">-oN nmap/scan.txt</option>
+          <option value="-oX nmap/scan.xml">-oX nmap/scan.xml</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Command</h3>
+    <div id="nmOutCmd"></div>
+    <p class="hint" id="nmHint" style="margin-bottom:0"></p>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/nmap.js') }}"></script>
+{% endblock %}

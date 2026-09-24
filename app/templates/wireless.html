@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>{{ title }} <span class="tag">{{ tag }}</span></h2>
+    <p>Wi-Fi, Bluetooth and RFID/NFC. Commands use plain placeholders (&lt;AP&gt;, &lt;MAC&gt;, &lt;id&gt;) — swap in your target.</p>
+  </div>
+
+  <div class="card">
+    <div class="seg tabseg" data-panels="wl">
+      {% for key, label, _ in tabs %}
+      <button type="button" data-tab="{{ key }}"{% if loop.first %} class="on"{% endif %}>{{ label }}</button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="tabpanels" data-panels="wl">
+    {% for key, label, cards in tabs %}
+    <div class="tabpanel" data-tab="{{ key }}"{% if not loop.first %} hidden{% endif %}>
+      {% for card in cards %}
+      <div class="card">
+        {% if card.title %}<h3>{{ card.title }}</h3>{% endif %}
+        {% if card.hint %}<p class="hint">{{ card.hint }}</p>{% endif %}
+        {% for b in card.blocks %}
+        <div class="cmd{% if b.plain %} plain{% endif %}" data-tpl="{{ b.tpl }}">{% if b.lbl %}<span class="lbl">{{ b.lbl }}</span>{% endif %}</div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

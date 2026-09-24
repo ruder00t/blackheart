@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>Day0 <span class="tag">reference</span></h2>
+    <p>Initial-setup commands and notes, kept per OS. Entries substitute your engagement variables live and each has a copy button. Saved to data/day0.json.</p>
+  </div>
+
+  <div class="card">
+    <div class="seg" id="d0Tabs">
+      {% for key, label in oses %}
+      <button type="button" data-os="{{ key }}"{% if loop.first %} class="on"{% endif %}>{{ label }}</button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div id="d0Panels"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.DAY0 = {{ day0 | tojson }};
+  window.DAY0_OSES = {{ oses | tojson }};
+  window.VARKEYS = {{ varkeys | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/day0.js') }}"></script>
+{% endblock %}

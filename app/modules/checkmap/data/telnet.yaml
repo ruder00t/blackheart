@@ -1,0 +1,166 @@
+module: telnet
+name: Telnet (23 / 992)
+inputs: [OUT, USERS, PASS]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version
+        commands: |
+          nmap -p$PORT -sV $IP
+      - id: banner_plain
+        text: Banner grab (cleartext)
+        commands: |
+          nc -nv $IP $PORT
+          (printf '\n'; sleep 3) | nc -nv $IP $PORT
+          nmap -p$PORT --script=banner $IP
+      - id: banner_tls
+        text: Banner grab (TLS / 992)
+        tls_only: true
+        commands: |
+          ncat --ssl $IP $PORT
+          openssl s_client -connect $IP:$PORT -quiet
+          socat - OPENSSL:$IP:$PORT,verify=0
+      - id: prompt_capture
+        text: Prompt / MOTD / issue capture
+        manual: true
+        commands: |
+          telnet $IP $PORT
+
+  - id: negotiation
+    name: Telnet Option Negotiation
+    steps:
+      - id: encryption_opt
+        text: Encryption option support
+        commands: |
+          nmap -p$PORT --script=telnet-encryption $IP
+      - id: negotiation_capture
+        text: Full option negotiation capture (WILL/WONT/DO/DONT)
+        manual: true
+        commands: |
+          telnet $IP $PORT
+      - id: ntlm_info
+        text: NTLM / Windows auth option info
+        commands: |
+          nmap -p$PORT --script=telnet-ntlm-info $IP
+      - id: environ_leak
+        text: ENVIRON / terminal-type leakage
+        manual: true
+        commands: |
+          # interactive: inspect ENVIRON / terminal-type negotiation
+
+  - id: fingerprint
+    name: Fingerprinting & Identification
+    steps:
+      - id: banner_os
+        text: Daemon / OS from banner
+        commands: |
+          nmap -p$PORT -sV --script=banner $IP
+      - id: version_module
+        text: Version module
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/telnet/telnet_version; set RHOSTS $IP; set RPORT $PORT; run; exit"
+      - id: device_ident
+        text: Device / vendor identification
+        manual: true
+        commands: |
+          (printf '\n'; sleep 3) | nc -nv $IP $PORT | tee $OUT/telnet_banner.txt
+
+  - id: tls
+    name: TLS / SSL (992 only)
+    tls_only: true
+    steps:
+      - id: tls_audit
+        text: Full TLS audit
+        commands: |
+          sslscan $IP:$PORT
+          testssl.sh $IP:$PORT
+          sslyze $IP:$PORT
+          nmap -p$PORT --script=ssl-enum-ciphers $IP
+      - id: cert_san
+        text: Certificate details / SAN harvest
+        commands: |
+          openssl s_client -connect $IP:$PORT </dev/null 2>/dev/null | openssl x509 -noout -text
+          echo | openssl s_client -connect $IP:$PORT 2>/dev/null | openssl x509 -noout -ext subjectAltName
+      - id: tls_vulns
+        text: Known TLS vulnerabilities
+        commands: |
+          nmap -p$PORT --script=ssl-heartbleed,ssl-poodle,ssl-ccs-injection $IP
+
+  - id: auth
+    name: Authentication Surface Mapping
+    steps:
+      - id: auth_model
+        text: Auth requirement / model
+        manual: true
+        commands: |
+          telnet $IP $PORT
+          ncat --ssl $IP $PORT
+      - id: ntlm
+        text: NTLM info (Windows telnet)
+        commands: |
+          nmap -p$PORT --script=telnet-ntlm-info $IP
+      - id: lockout
+        text: Lockout / attempt behavior
+        manual: true
+        commands: |
+          # observe attempt-limit / lockout behavior
+
+  - id: vuln
+    name: Vulnerability Identification (fingerprint-driven)
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit telnetd
+          searchsploit <vendor> <model>
+      - id: script_vuln
+        text: Script-based vuln checks
+        commands: |
+          nmap -p$PORT --script=telnet-encryption,telnet-ntlm-info,vuln $IP
+      - id: encrypt_overflow
+        text: telnetd encryption overflow
+        commands: |
+          msfconsole -qx "use exploit/linux/telnet/telnet_encrypt_keyid; info; exit"
+      - id: iot_backdoor
+        text: Embedded / IoT backdoor checks
+        manual: true
+        commands: |
+          # device-specific known creds / backdoors
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute_plain
+        text: Brute-force (cleartext / 23)
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST telnet://$IP
+          medusa -h $IP -U $USERLIST -P $PASSLIST -M telnet
+          ncrack -p$PORT -U $USERLIST -P $PASSLIST $IP
+          nmap -p$PORT --script=telnet-brute --script-args userdb=$USERLIST,passdb=$PASSLIST $IP
+      - id: brute_msf
+        text: Brute-force via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/telnet/telnet_login; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+      - id: brute_tls
+        text: Brute-force (TLS / 992 via socat relay)
+        tls_only: true
+        commands: |
+          socat TCP-LISTEN:2323,fork,reuseaddr OPENSSL:$IP:$PORT,verify=0 &
+          hydra -L $USERLIST -P $PASSLIST telnet://127.0.0.1:2323
+
+  - id: disclosure
+    name: Information Disclosure
+    steps:
+      - id: banner_capture
+        text: Capture pre-auth banner / MOTD / issue
+        commands: |
+          (printf '\n'; sleep 3) | nc -nv $IP $PORT | tee $OUT/telnet_predisclosure.txt
+      - id: grep_banner
+        text: Record disclosed hosts / versions
+        commands: |
+          grep -Ei 'host|version|kernel|linux|cisco|router|admin' $OUT/telnet_banner.txt

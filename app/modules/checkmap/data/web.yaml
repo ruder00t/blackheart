@@ -1,0 +1,363 @@
+module: web
+name: Web (HTTP / HTTPS)
+# Variables these commands may use. IP/PORT/URL/HOST are auto-filled;
+# the rest are left as literal placeholders unless supplied.
+inputs: [DOMAIN, WL, SUBWL, RESOLVERS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Scheme Detection
+    steps:
+      - id: probe_scheme
+        text: Confirm live / probe scheme
+        commands: |
+          httpx -u $IP:$PORT -sc -title -td -location -ip
+          curl -sSI $URL
+          nmap -p$PORT -sV --script=http-title $IP
+      - id: raw_headers
+        text: Retrieve raw response headers
+        commands: |
+          curl -sSI -k $URL
+          curl -sS -k -D - $URL -o /dev/null
+      - id: methods
+        text: Enumerate allowed HTTP methods
+        commands: |
+          curl -sS -k -X OPTIONS -i $URL
+          nmap -p$PORT --script=http-methods --script-args http-methods.test-all=true $IP
+      - id: redirects
+        text: Map redirect chain
+        commands: |
+          curl -sS -k -IL $URL
+          curl -sS -k -o /dev/null -w '%{url_effective}\n' -L $URL
+      - id: nonstandard_methods
+        text: Test non-standard methods (PUT/TRACE/DELETE)
+        manual: true
+        commands: |
+          curl -sS -k -X TRACE -i $URL
+          curl -sS -k -X PUT -i $URL/test.txt -d 'x'
+      - id: default_page
+        text: Identify default / placeholder page
+        commands: |
+          whatweb -a3 $URL
+
+  - id: fingerprint
+    name: Fingerprinting & Technology Identification
+    steps:
+      - id: stack
+        text: Identify server / framework / stack
+        commands: |
+          whatweb -a3 -v $URL
+          httpx -u $URL -td -server -title -json
+          webanalyze -host $URL -crawl 2
+          nmap -p$PORT -sV --script=http-server-header,http-headers $IP
+      - id: cms
+        text: CMS detection
+        commands: |
+          whatweb $URL
+          nuclei -u $URL -t http/technologies/
+          cmseek -u $URL
+      - id: wordpress
+        text: WordPress-specific enumeration
+        commands: |
+          wpscan --url $URL --enumerate vp,vt,u --random-user-agent
+      - id: waf
+        text: WAF detection
+        commands: |
+          wafw00f $URL
+          nmap -p$PORT --script=http-waf-detect,http-waf-fingerprint $IP
+      - id: favicon
+        text: Favicon hash pivot
+        commands: |
+          curl -sS -k $URL/favicon.ico | md5sum
+      - id: js_versions
+        text: JS / library version extraction
+        commands: |
+          getJS --url $URL | httpx -mc 200 -td
+          retire --js --path ./downloaded_js
+      - id: error_fingerprint
+        text: Error page / stack trace fingerprint
+        manual: true
+        commands: |
+          curl -sS -k "$URL/nonexistent-$(date +%s)"
+
+  - id: tls
+    name: TLS / SSL
+    tls_only: true
+    steps:
+      - id: tls_audit
+        text: Full TLS audit
+        commands: |
+          testssl.sh $HOST:$PORT
+          sslscan $HOST:$PORT
+          sslyze $HOST:$PORT
+          nmap -p$PORT --script=ssl-enum-ciphers $IP
+      - id: cert_san
+        text: Certificate details / SAN harvest
+        commands: |
+          openssl s_client -connect $HOST:$PORT -servername $HOST </dev/null 2>/dev/null | openssl x509 -noout -text
+          echo | openssl s_client -connect $HOST:$PORT 2>/dev/null | openssl x509 -noout -ext subjectAltName
+      - id: tls_vulns
+        text: Known TLS vulnerabilities
+        commands: |
+          nmap -p$PORT --script=ssl-heartbleed,ssl-poodle,ssl-ccs-injection $IP
+
+  - id: subdomain
+    name: Subdomain Enumeration
+    steps:
+      - id: passive
+        text: Passive subdomain enumeration
+        commands: |
+          subfinder -d $DOMAIN -all -recursive -o $OUT/subs_passive.txt
+          amass enum -passive -d $DOMAIN -o $OUT/amass.txt
+          assetfinder --subs-only $DOMAIN
+          findomain -t $DOMAIN
+      - id: ct_logs
+        text: Certificate transparency harvest
+        commands: |
+          curl -sS "https://crt.sh/?q=%25.$DOMAIN&output=json" | jq -r '.[].name_value' | sort -u
+      - id: dns_brute
+        text: DNS brute-force
+        commands: |
+          puredns bruteforce $SUBWL $DOMAIN -r $RESOLVERS -w $OUT/subs_brute.txt
+          gobuster dns -d $DOMAIN -w $SUBWL -t 50
+          shuffledns -d $DOMAIN -w $SUBWL -r $RESOLVERS
+      - id: permutation
+        text: Permutation / alteration enumeration
+        commands: |
+          dnsgen $OUT/subs_all.txt | puredns resolve -r $RESOLVERS
+          altdns -i $OUT/subs_all.txt -o /tmp/perm -w $SUBWL | puredns resolve -r $RESOLVERS
+      - id: resolve
+        text: Resolve + wildcard filter
+        commands: |
+          dnsx -l $OUT/subs_all.txt -a -resp -o $OUT/resolved.txt
+          puredns resolve $OUT/subs_all.txt -r $RESOLVERS --wildcard-tests 30
+      - id: live_probe
+        text: Live host probing
+        commands: |
+          httpx -l $OUT/resolved.txt -sc -title -td -o $OUT/live.txt
+      - id: takeover
+        text: Subdomain takeover detection
+        commands: |
+          subjack -w $OUT/resolved.txt -ssl -v
+          nuclei -l $OUT/resolved.txt -t http/takeovers/
+
+  - id: vhost
+    name: Virtual Host Discovery
+    steps:
+      - id: vhost_fuzz
+        text: Host header / vhost fuzzing
+        commands: |
+          ffuf -w $SUBWL -u $URL -H "Host: FUZZ.$DOMAIN" -ac
+          gobuster vhost -u $URL -w $SUBWL --append-domain
+
+  - id: content
+    name: Directory & Content Discovery
+    steps:
+      - id: dir_brute
+        text: Directory / file brute-force
+        commands: |
+          ffuf -w $WL -u $URL/FUZZ -recursion -recursion-depth 2 -e .php,.txt,.bak,.old,.zip,.conf -ac
+          feroxbuster -u $URL -w $WL -x php,txt,bak,zip -d 2
+          gobuster dir -u $URL -w $WL -x php,txt,html,bak -t 50
+          dirsearch -u $URL -e php,txt,bak,zip,conf -r
+      - id: exposures
+        text: Backup / config / repo exposure
+        commands: |
+          nuclei -u $URL -t http/exposures/ -t http/misconfiguration/
+          curl -sS -k $URL/.env
+          curl -sS -k $URL/.git/HEAD
+          git-dumper $URL/.git/ $OUT/git_dump
+      - id: standard_files
+        text: Standard files (robots/sitemap/security.txt)
+        commands: |
+          for f in robots.txt sitemap.xml security.txt .well-known/security.txt humans.txt; do curl -sS -k -o /dev/null -w "%{http_code} $f\n" $URL/$f; done
+      - id: status_endpoints
+        text: Status / actuator / monitoring endpoints
+        commands: |
+          curl -sS -k $URL/actuator
+          curl -sS -k $URL/server-status
+
+  - id: crawl
+    name: Crawling & Spidering
+    steps:
+      - id: active_crawl
+        text: Active crawl
+        commands: |
+          katana -u $URL -jc -kf all -d 3 -o $OUT/katana.txt
+          hakrawler -url $URL -depth 3 -plain
+          gospider -s $URL -d 3 -c 10 --other-source
+      - id: passive_urls
+        text: Passive / historical URLs
+        commands: |
+          gau $DOMAIN --threads 10 -o $OUT/gau.txt
+          waybackurls $DOMAIN > $OUT/wayback.txt
+      - id: js_endpoints
+        text: JS endpoint extraction
+        commands: |
+          xnLinkFinder -i $URL -sf $DOMAIN -d 3
+          getJS --url $URL --complete | linkfinder -i /dev/stdin -o cli
+
+  - id: params
+    name: Parameter Discovery
+    steps:
+      - id: param_brute
+        text: Hidden parameter brute-force
+        commands: |
+          arjun -u $URL -m GET,POST -oT $OUT/params.txt
+          x8 -u $URL -w $WL
+          paramspider -d $DOMAIN
+      - id: param_from_sources
+        text: Parameters from crawled / historical sources
+        commands: |
+          cat $OUT/gau.txt $OUT/wayback.txt | unfurl -u keys | sort -u
+
+  - id: api
+    name: API Enumeration
+    steps:
+      - id: api_detect
+        text: Detect style / base paths
+        commands: |
+          ffuf -w /path/api-wordlist.txt -u $URL/FUZZ
+          kr scan $URL -w /path/routes-large.kite
+          graphw00f -d -t $URL
+      - id: api_docs
+        text: API documentation discovery
+        commands: |
+          for p in swagger.json openapi.json api-docs v2/api-docs swagger-ui.html graphql; do curl -sS -k -o /dev/null -w "%{http_code} $p\n" $URL/$p; done
+      - id: graphql_introspect
+        text: GraphQL introspection
+        commands: |
+          curl -sS -k -X POST $URL/graphql -H 'Content-Type: application/json' -d '{"query":"{__schema{types{name}}}"}'
+          clairvoyance $URL/graphql -o $OUT/schema.json
+      - id: api_vulns
+        text: API vuln templates
+        commands: |
+          nuclei -u $URL -t http/exposures/apis/ -t http/misconfiguration/
+
+  - id: auth
+    name: Authentication & Session Surface
+    steps:
+      - id: auth_endpoints
+        text: Locate auth endpoints
+        commands: |
+          grep -Ei 'login|signin|register|reset|sso|oauth|saml|auth' $OUT/katana.txt $OUT/gau.txt | sort -u
+      - id: cookie_flags
+        text: Cookie flags
+        commands: |
+          curl -sS -k -I $URL | grep -i set-cookie
+      - id: oidc
+        text: OpenID / SSO discovery
+        commands: |
+          curl -sS -k $URL/.well-known/openid-configuration
+      - id: user_enum_surface
+        text: Account enumeration surface
+        manual: true
+        commands: |
+          # compare responses/timing for valid vs invalid user on login/reset/register
+
+  - id: vuln
+    name: Vulnerability Identification (fingerprint-driven)
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit <product> <version>
+          nuclei -u $URL -t http/cves/ -severity critical,high,medium
+      - id: broad_nuclei
+        text: Broad template scan
+        commands: |
+          nuclei -u $URL -t http/ -etags dos,intrusive -severity critical,high,medium,low
+      - id: legacy_scan
+        text: Legacy web vuln scan
+        commands: |
+          nikto -h $URL
+          nmap -p$PORT --script=vuln $IP
+      - id: cms_vuln
+        text: CMS-specific vuln scan
+        commands: |
+          wpscan --url $URL --enumerate vp,vt --plugins-detection aggressive
+          joomscan -u $URL
+          droopescan scan drupal -u $URL
+
+  - id: creds
+    name: Default Credentials & Exposed Config
+    steps:
+      - id: default_logins
+        text: Default logins
+        commands: |
+          nuclei -u $URL -t http/default-logins/
+      - id: login_brute
+        text: Login brute-force
+        authorized: true
+        commands: |
+          hydra -L users.txt -P $PASSLIST $HOST http-post-form "/login:user=^USER^&pass=^PASS^:F=incorrect"
+          ffuf -w users.txt:U -w pass.txt:P -u $URL/login -X POST -d "username=U&password=P" -fr "invalid"
+      - id: secrets
+        text: Exposed config / secrets
+        commands: |
+          nuclei -u $URL -t http/exposures/configs/ -t http/exposures/tokens/
+          trufflehog filesystem $OUT/git_dump
+          gitleaks detect -s $OUT/git_dump
+
+  - id: proxy
+    name: Proxy Checks
+    only_ports: [3128, 8080, 8888]
+    steps:
+      - id: open_proxy
+        text: Open forward proxy detection
+        commands: |
+          curl -sS -x http://$IP:$PORT http://example.com -I
+          nmap -p$PORT --script=http-open-proxy $IP
+      - id: ssrf_proxy
+        text: SSRF via proxy (internal / metadata)
+        commands: |
+          curl -sS -x http://$IP:$PORT http://127.0.0.1/ -I
+          curl -sS -x http://$IP:$PORT http://169.254.169.254/latest/meta-data/ -I
+      - id: proxy_sweep
+        text: Internal host/port sweep via proxy
+        commands: |
+          for p in 22 80 443 3306 6379 8080; do curl -sS -o /dev/null -w "$p %{http_code}\n" -x http://$IP:$PORT http://127.0.0.1:$p/; done
+
+  - id: admin
+    name: Admin Console Checks
+    only_ports: [4848]
+    steps:
+      - id: admin_ident
+        text: Identify console / version
+        commands: |
+          whatweb $URL
+          curl -sS -k -I $URL
+          nmap -p$PORT -sV $IP
+      - id: admin_creds
+        text: Login / default credentials
+        authorized: true
+        commands: |
+          nuclei -u $URL -t http/default-logins/
+          hydra -l admin -P $PASSLIST $IP -s $PORT https-get /
+      - id: admin_endpoints
+        text: Management / deploy endpoints
+        manual: true
+        commands: |
+          curl -sS -k $URL/management/domain
+          curl -sS -k $URL/common/index.jsf
+
+  - id: exploit
+    name: Exploitation
+    authorized: true
+    steps:
+      - id: vulnscan
+        text: "Automated vuln scan"
+        commands: |
+          nikto -h $URL
+          nuclei -u $URL
+      - id: content
+        text: "Content & parameter discovery"
+        commands: |
+          feroxbuster -u $URL -w $WL
+          ffuf -u $URL/FUZZ -w $WL
+      - id: inject
+        text: "Injection — see SQLi / XSS / File Upload tabs"
+        commands: |
+          sqlmap -u "$URL/?id=1" --batch --dbs
+          wpscan --url $URL --enumerate u,vp,vt

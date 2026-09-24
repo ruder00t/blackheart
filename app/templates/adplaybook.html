@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>{{ title }}{% if tag %} <span class="tag">{{ tag }}</span>{% endif %}</h2>
+    {% if intro %}<p>{{ intro }}</p>{% endif %}
+    <a class="btn ghost pb-mapbtn" href="{{ mindmap_url }}" target="_blank" rel="noopener">
+      Open full AD mindmap &#8599;
+    </a>
+    <p class="pb-credit">Mindmap: Orange Cyberdefense — ocd-mindmaps (GPLv3), bundled offline.</p>
+  </div>
+
+  <div class="card pb-tabsbar">
+    <div class="seg tabseg" data-panels="adpb">
+      {{ seg | safe }}
+    </div>
+  </div>
+
+  <div class="tabpanels pb-panels" data-panels="adpb">
+    {{ panels | safe }}
+  </div>
+</section>
+{% endblock %}

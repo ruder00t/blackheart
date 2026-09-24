@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>CheckMap <span class="tag">recon</span></h2>
+    <p>Route open ports to service modules and render a per-host checklist, fed by your engagement variables. From a scan, or by hand.</p>
+  </div>
+
+  {% if error %}
+  <div class="card" style="border-color:var(--red)">
+    <p style="margin:0;color:var(--bone)">{{ error }}</p>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h3>From scan</h3>
+    <p class="hint">Scan with <span style="font-family:var(--mono);color:var(--bone)">nmap -sV -oX scan.xml &lt;target&gt;</span>. XML preferred; grepable and normal output also parse.</p>
+    <form method="post" enctype="multipart/form-data">
+      <input type="file" name="scan" accept=".xml,.gnmap,.nmap,.txt" required
+             style="color:var(--bone-dim);font-size:13px;margin-bottom:14px;display:block">
+      <button class="btn" type="submit">Generate checklists</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Manual</h3>
+    <p class="hint">No scan? Pick the open ports and generate a checklist for your target.</p>
+    <form method="post" action="{{ url_for('checkmap.manual') }}">
+      <div class="field" style="max-width:260px;margin-bottom:16px">
+        <label>Target <code>$RHOST</code></label>
+        <input type="text" name="ip" value="{{ gvars['RHOST'] }}">
+      </div>
+      {% for module, ports in manual_groups %}
+      <div class="chipgroup">
+        <h4>{{ module }}</h4>
+        <div class="chips">
+          {% for p in ports %}
+          <label class="chip"><input type="checkbox" name="ports" value="{{ p }}"><span class="box"></span>{{ p }} <span class="svc">{{ module }}</span></label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <button class="btn" type="submit">Generate checklist</button>
+    </form>
+  </div>
+
+  {% if outputs %}
+  <div class="card">
+    <h3>Generated checklists</h3>
+    <p class="hint">Open in a new tab; checkbox state persists per host.</p>
+    {% for ip in outputs %}
+    <div class="cmd" style="padding-right:13px">{{ ip }}
+      <a class="copy" style="position:static;float:right" target="_blank"
+         href="{{ url_for('checkmap.view', ip=ip) }}">open</a>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+data/vars.json
+data/checkmap/
+data/day0.json
+data/additions.json
+data/library.json
+app/static/hacktricks/
+hacktricks/
+
+# ttyd static binary fetched by install.sh
+bin/

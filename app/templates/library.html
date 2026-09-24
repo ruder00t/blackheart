@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>Library</h2>
+    <p>Your own commands, grouped by program. Use the placeholder buttons so entries pick up your engagement variables live. Saved to data/library.json.</p>
+  </div>
+
+  <div class="card">
+    <h3>Add program</h3>
+    <div class="row">
+      <div class="field" style="flex:1;min-width:220px"><label>Program name</label><input type="text" id="libProg" placeholder="e.g. nmap"></div>
+      <button class="btn" id="libAddProg" style="align-self:flex-end">Add program</button>
+    </div>
+  </div>
+
+  <div id="libList"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.LIBRARY = {{ library | tojson }};
+  window.VARKEYS = {{ varkeys | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/library.js') }}"></script>
+{% endblock %}

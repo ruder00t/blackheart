@@ -1,0 +1,28 @@
+{
+  "scripts": [
+    {
+      "name": "which one-liner — interpreters + net (Linux)",
+      "body": "which python python2 python3 perl ruby php php7 php8 lua lua5.1 node nodejs go gcc java bash sh zsh nc ncat netcat socat curl wget openssl ssh telnet awk 2>/dev/null"
+    },
+    {
+      "name": "command -v — interpreters & shells (Linux, portable)",
+      "body": "# Works even where 'which' is missing. Prints only what exists, with its path.\nfor b in sh bash dash zsh ksh ash busybox \\\n         python python2 python3 \\\n         perl ruby php php7 php8 lua lua5.1 lua5.3 tclsh expect \\\n         node nodejs deno \\\n         gcc cc g++ clang make \\\n         go rustc java javac \\\n         awk gawk mawk sed; do\n  p=$(command -v \"$b\" 2>/dev/null) && printf '%-10s %s\\n' \"$b\" \"$p\"\ndone"
+    },
+    {
+      "name": "command -v — networking & transfer tools (Linux)",
+      "body": "# Binaries handy for reverse shells, tunnelling and exfil.\nfor b in nc ncat netcat nc.traditional nc.openbsd socat \\\n         curl wget \\\n         ssh scp sftp telnet ftp \\\n         openssl stunnel \\\n         rlwrap script \\\n         base64 xxd od \\\n         mkfifo mknod \\\n         tcpdump nmap ping; do\n  p=$(command -v \"$b\" 2>/dev/null) && printf '%-14s %s\\n' \"$b\" \"$p\"\ndone"
+    },
+    {
+      "name": "Full binary recon — one pass (Linux)",
+      "body": "# Everything at once: which language/shell/net binary is present.\nfor b in sh bash dash zsh ksh ash busybox \\\n         python python2 python3 perl ruby php lua lua5.1 tclsh expect \\\n         node nodejs deno gcc cc g++ clang make go rustc java javac \\\n         awk gawk mawk sed \\\n         nc ncat netcat nc.traditional socat \\\n         curl wget ssh scp sftp telnet ftp openssl \\\n         rlwrap base64 xxd mkfifo mknod tcpdump nmap; do\n  p=$(command -v \"$b\" 2>/dev/null) && printf '  [+] %-14s %s\\n' \"$b\" \"$p\"\ndone\necho '--- done ---'"
+    },
+    {
+      "name": "where — interpreters & tools (Windows CMD)",
+      "body": ":: 'where' searches PATH and prints the full path, or nothing (errors hidden).\n@echo off\nfor %%b in (python.exe python3.exe py.exe perl.exe ruby.exe php.exe ^\n            powershell.exe pwsh.exe cscript.exe wscript.exe mshta.exe ^\n            node.exe java.exe ^\n            nc.exe ncat.exe netcat.exe socat.exe ^\n            curl.exe wget.exe certutil.exe bitsadmin.exe ^\n            ssh.exe openssl.exe) do @where %%b 2>nul"
+    },
+    {
+      "name": "Get-Command — interpreters & tools (Windows PowerShell)",
+      "body": "# Prints each binary that resolves on this host, with its source path.\n$bins = @(\n  'python','python3','py','perl','ruby','php',\n  'powershell','pwsh','cscript','wscript','mshta',\n  'node','java',\n  'nc','ncat','netcat','socat',\n  'curl','wget','certutil','bitsadmin','openssl','ssh'\n)\nforeach ($b in $bins) {\n  $c = Get-Command $b -ErrorAction SilentlyContinue\n  if ($c) { '{0,-12} {1}' -f $b, $c.Source }\n}"
+    }
+  ]
+}

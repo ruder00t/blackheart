@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blackheart</title>
+<link rel="icon" href="{{ url_for('static', filename='img/logo.svg') }}" type="image/svg+xml">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+
+{% macro navitem(it, sub=False) %}
+  {% if it.soon %}
+    <span class="navitem soon{{ ' subitem' if sub }}"><span class="dot"></span>{{ it.title }}</span>
+  {% else %}
+    <a class="navitem{{ ' subitem' if sub }} {{ 'active' if it.id == active }}" href="{{ url_for(it.endpoint) }}"{% if it.blank %} target="_blank" rel="noopener"{% endif %}><span class="dot"></span>{{ it.title }}{% if it.blank %} <span class="ext">&#8599;</span>{% endif %}</a>
+  {% endif %}
+{% endmacro %}
+
+<aside class="side">
+  <div class="brand">
+    <button class="logobtn" id="logoSave" title="Save variables">
+      <img class="logo" src="{{ url_for('static', filename='img/logo.svg') }}" alt="Blackheart — save">
+    </button>
+    <div>
+      <h1>Blackheart</h1>
+    </div>
+  </div>
+  <nav>
+    {% for category, section in nav %}
+    <div class="navgroup" data-cat="{{ category }}">
+      <button class="navhead" type="button"><span class="caret"></span>{{ category }}</button>
+      <div class="navbody">
+        {% for it in section.entries %}{{ navitem(it) }}{% endfor %}
+        {% for gname, gitems in section.groups %}
+          <div class="navsub">{{ gname }}</div>
+          {% for it in gitems %}{{ navitem(it, sub=True) }}{% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </nav>
+  <div class="foot">running on <b>127.0.0.1:8090</b><br>fully offline</div>
+</aside>
+
+<main>
+  <!-- sticky top bar: Contents + Search (relocated here) + terminal controls -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="tb-btn" id="aboutBtn" title="What's in Blackheart">Blackheart</button>
+      <button class="tb-btn tb-icon" id="searchBtn" title="Search Blackheart (Ctrl-K)" aria-label="Search">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </button>
+    </div>
+    <div class="topbar-right">
+      <button class="tb-btn" id="termToggle" title="Toggle the 2x2 terminal">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 9l3 3-3 3"></path><line x1="13" y1="15" x2="17" y2="15"></line></svg>
+        <span>Terminal</span>
+      </button>
+      <!-- tiles: status indicators AND active-target selector, laid out 2x2
+           (TL TR / BL BR) to echo the pane grid. blue=empty, green=used. -->
+      <div class="tiles" id="paneTiles" title="Active send target — click a quadrant">
+        <button class="tile blue" data-q="0" title="Top-left (pane 0.0)"></button>
+        <button class="tile blue" data-q="1" title="Top-right (pane 0.1)"></button>
+        <button class="tile blue" data-q="2" title="Bottom-left (pane 0.2)"></button>
+        <button class="tile blue" data-q="3" title="Bottom-right (pane 0.3)"></button>
+      </div>
+    </div>
+  </header>
+
+  {% block content %}{% endblock %}
+</main>
+
+<!-- in-page 2x2 terminal (ttyd iframe of the blackheart tmux session) -->
+<div class="termOverlay" id="termOverlay" hidden>
+  <div class="termOverlay-head">
+    <span class="tt">Terminal — <b>blackheart</b> (2&times;2)</span>
+    <div class="grow"></div>
+    <a class="tb-btn tb-icon" href="{{ url_for('terminal.terminal_page') }}" target="_blank" rel="noopener" title="Pop out to a new window">&#8599;</a>
+    <button class="tb-btn tb-icon" id="termClose" title="Close terminal">&times;</button>
+  </div>
+  <div class="termOverlay-body">
+    <iframe id="termOverlayFrame" title="Blackheart tmux (2x2)"></iframe>
+    <div class="termOverlay-msg" id="termOverlayMsg" hidden><div class="box">
+      <h2>Terminal unavailable</h2>
+      <p id="termOverlayMsgText">Checking dependencies…</p>
+    </div></div>
+  </div>
+</div>
+
+<!-- 2x2 quadrant picker for sending to a non-default pane -->
+<div class="pickerPop" id="pickerPop" hidden>
+  <div class="pickerGrid">
+    <button data-q="0" title="Top-left (0.0)">TL</button>
+    <button data-q="1" title="Top-right (0.1)">TR</button>
+    <button data-q="2" title="Bottom-left (0.2)">BL</button>
+    <button data-q="3" title="Bottom-right (0.3)">BR</button>
+  </div>
+  <div class="pickerFoot">click a quadrant &middot; <kbd>shift</kbd> = run now</div>
+</div>
+
+<div class="searchOverlay" id="searchOverlay" hidden>
+  <div class="searchBox" role="dialog" aria-label="Search">
+    <input id="searchInput" type="text" placeholder="Search every command in Blackheart…" autocomplete="off" spellcheck="false">
+    <div class="searchResults" id="searchResults"></div>
+    <div class="searchFoot"><kbd>↑</kbd><kbd>↓</kbd> navigate · <kbd>enter</kbd> open · <kbd>esc</kbd> close</div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied</div>
+
+<div class="searchOverlay" id="aboutOverlay" hidden>
+  <div class="searchBox" role="dialog" aria-label="Blackheart contents">
+    <div class="aboutBody">
+      <h2>Blackheart <span class="t">&mdash; Contents</span></h2>
+      <p>The collection:</p>
+      <ul>
+        <li>Variables &amp; home (the shared values that feed every command), Wordlists, and OSINT (tools, live web resources, image intel).</li>
+        <li>Nmap builder (assemble an nmap command from options)</li>
+        <li>CheckMap (turn an nmap scan into per-host service checklists)</li>
+        <li>VersionCheck (check for outdated versions from WhatWeb or an nmap scan)</li>
+        <li>Exploitation (SQLi, XSS, SSTI, XML, API, CMS/WordPress, Wireless, File Upload, and a full Active Directory attack-path playbook — tabbed by access level, ESC1–ESC15, coercion, SCCM, trusts, with the OCD mindmap bundled offline)</li>
+        <li>Access (Reverse shells — now with a Webshells subchapter (PHP/ASPX/JSP, Antak, Laudanum, tunnelers) — and Listeners)</li>
+        <li>Privilege Escalation (Windows, Linux, Mac, Automation, plus offline GTFOBins and LOLBAS)</li>
+        <li>Post-exploit (Pivoting, Pillaging, Persistence, File transfer)</li>
+        <li>Reference (HackTricks (offline copy), Cracking (hashcat/John + custom wordlists: username-anarchy, CUPP), Day0 (fresh install))</li>
+        <li>Decode (offline CyberChef + hash identifier), JWT (decode, verify, sign, attacks) and Cmd Obfuscator</li>
+        <li>Libraries (Command Library, Tool library, Script library)</li>
+        <li>CVSS Calculator (v3.1 base + temporal score, severity, copyable vector string)</li>
+        <li>Report Builder (fill in a Markdown report, theme it, export a standalone PDF)</li>
+        <li>Additions overlay (pin your own notes onto any tab, with import and export functionality)</li>
+      </ul>
+    </div>
+    <div class="searchFoot"><kbd>esc</kbd> close</div>
+  </div>
+</div>
+
+<script>
+  window.VARS = {{ gvars | tojson }};
+  window.ACTIVE = {{ (active if active is defined else "") | tojson }};
+  window.ADDITIONS = {{ additions | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>
+(function () {
+  var b = document.getElementById("aboutBtn"), o = document.getElementById("aboutOverlay");
+  if (!b || !o) return;
+  b.addEventListener("click", function () { o.hidden = false; });
+  o.addEventListener("click", function (e) { if (e.target === o) o.hidden = true; });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !o.hidden) o.hidden = true;
+  });
+})();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

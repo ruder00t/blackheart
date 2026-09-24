@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>Tool library</h2>
+    <p>Your tools and where to get them — name plus a download path or repo link. Copy the link with one click. Saved to data/tool_library.json.</p>
+  </div>
+
+  <div class="card">
+    <h3>Add tool</h3>
+    <div class="row">
+      <div class="field" style="flex:1;min-width:180px"><label>Tool name</label><input type="text" id="tlName" placeholder="e.g. linpeas"></div>
+      <div class="field" style="flex:2;min-width:260px"><label>Download path / link</label><input type="text" id="tlPath" placeholder="https://github.com/... or /opt/tool"></div>
+      <button class="btn" id="tlAdd" style="align-self:flex-end">Add</button>
+    </div>
+  </div>
+
+  <div id="tlList"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>window.TOOLS = {{ data | tojson }};</script>
+<script src="{{ url_for('static', filename='js/tool_library.js') }}"></script>
+{% endblock %}

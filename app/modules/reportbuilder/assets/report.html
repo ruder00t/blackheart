@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{TITLE}}</title>
+<link rel="stylesheet" href="{{STYLESHEET}}">
+<style>{{STYLE_OVERRIDE}}</style>
+</head>
+<body>
+
+<!-- Running elements: pulled out of the flow and painted into the page margins -->
+<img class="running-logo" src="{{LOGO_PATH}}" alt="">
+<div class="running-footer">
+  <span class="foot-class">{{CLASSIFICATION}}</span>
+  <span class="foot-title">{{TITLE}}</span>
+</div>
+
+<section class="cover">
+  <img class="cover-logo" src="{{LOGO_PATH}}" alt="">
+  <p class="cover-doctype">{{DOCTYPE}}</p>
+  <h1 class="cover-title">{{TITLE}}</h1>
+  <p class="cover-subtitle">{{SUBTITLE}}</p>
+  <table class="cover-meta">
+    <tr><th>Client</th><td>{{CLIENT}}</td></tr>
+    <tr><th>Assessor</th><td>{{CANDIDATE}}</td></tr>
+    <tr><th>Date</th><td>{{DATE}}</td></tr>
+    <tr><th>Version</th><td>{{VERSION}}</td></tr>
+  </table>
+  <p class="cover-class">{{CLASSIFICATION}}</p>
+</section>
+
+<section class="toc" id="toc">
+  <h1 class="toc-heading">Table of Contents</h1>
+  {{TOC}}
+</section>
+
+<main class="report-body">
+{{CONTENT}}
+</main>
+
+</body>
+</html>

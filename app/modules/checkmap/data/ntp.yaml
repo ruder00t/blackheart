@@ -1,0 +1,46 @@
+module: ntp
+name: NTP (123 UDP)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version
+        commands: |
+          nmap -sU -p$PORT -sV $IP
+          ntpq -c rv $IP
+
+  - id: enum
+    name: Enumeration
+    steps:
+      - id: monlist
+        text: monlist - recent clients (recon + amplification indicator)
+        commands: |
+          nmap -sU -p$PORT --script=ntp-monlist $IP
+          ntpdc -n -c monlist $IP
+      - id: peers
+        text: Peers / associations / server info
+        commands: |
+          ntpq -p $IP
+          ntpdc -c sysinfo $IP
+          ntpdc -c listpeers $IP
+      - id: info
+        text: NSE info (variables, processor, system)
+        commands: |
+          nmap -sU -p$PORT --script=ntp-info $IP
+
+  - id: vuln
+    name: Vulnerability Notes
+    steps:
+      - id: amplification
+        text: DDoS amplification exposure (monlist / mode 6/7 responders)
+        manual: true
+        commands: |
+          # if monlist/readvar respond to spoofable queries -> report as amplifier
+      - id: cve_map
+        text: Version to CVE mapping (ntpd)
+        commands: |
+          searchsploit ntp
