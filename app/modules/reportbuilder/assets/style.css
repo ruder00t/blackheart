@@ -1,0 +1,374 @@
+/* ==========================================================================
+   Pentest report stylesheet - CPTS layout for WeasyPrint
+   Tweak the variables below to rebrand; everything else follows from them.
+   ========================================================================== */
+
+:root {
+  --accent:        #f2811d;  /* rules, bands, borders                        */
+  --accent-strong: #ff9d45;  /* headings, links, emphasis (brighter on dark) */
+
+  --page:          #1c1e22;  /* page background - very dark grey             */
+  --surface:       #2a2e34;  /* table headers, finding banners               */
+  --surface-alt:   #232629;  /* zebra striping                               */
+  --ink:           #e6e8ea;  /* body text                                    */
+  --muted:         #99a2ad;
+  --rule:          #3c424a;
+  --table-head:    var(--surface);
+  --code-bg:       #16181b;
+
+  --critical: #9e1b28;  /* burgundy - deepest tone in the ramp             */
+  --high:     #e03131;  /* clear red, kept off the orange accent           */
+  --medium:   #ffb224;
+  --low:      #4899e8;
+  --info:     #8b949e;
+}
+
+/* --------------------------------------------------------------------------
+   Page setup: logo in the top margin, classification + page number in the foot
+   -------------------------------------------------------------------------- */
+
+@page {
+  size: A4;
+  margin: 26mm 20mm 20mm 20mm;
+  /* Set on @page, not body: this is what paints the full bleed including
+     the margin boxes, so no white gutters survive around the content. */
+  background: var(--page);
+
+  @top-left    { content: element(runlogo); vertical-align: bottom; }
+  @bottom-left { content: element(runfoot); vertical-align: top; }
+  @bottom-right {
+    content: counter(page);
+    font: 8.5pt "Carlito", "Liberation Sans", sans-serif;
+    color: var(--muted);
+    vertical-align: top;
+    padding-top: 3mm;
+  }
+}
+
+/* The cover is always the first page: full bleed, no running header or footer. */
+@page :first {
+  margin: 0;
+  @top-left     { content: none; }
+  @bottom-left  { content: none; }
+  @bottom-right { content: none; }
+}
+
+.running-logo   { position: running(runlogo); height: 11mm; padding-bottom: 3mm; }
+.running-footer {
+  position: running(runfoot);
+  font: 8.5pt "Carlito", "Liberation Sans", sans-serif;
+  color: var(--muted);
+  padding-top: 3mm;
+  white-space: nowrap;
+}
+.running-footer .foot-class {
+  color: var(--accent-strong);
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+.running-footer .foot-title::before { content: "  \00b7  "; }
+
+/* --------------------------------------------------------------------------
+   Base typography
+   -------------------------------------------------------------------------- */
+
+body {
+  font: 10.5pt/1.55 "Carlito", "Liberation Sans", "DejaVu Sans", sans-serif;
+  color: var(--ink);
+  background: var(--page);
+  hyphens: auto;
+}
+
+p { margin: 0 0 .7em; text-align: justify; }
+a { color: var(--accent-strong); text-decoration: none; }
+
+h1, h2, h3, h4 {
+  color: var(--accent-strong);
+  line-height: 1.25;
+  break-after: avoid;
+  margin: 0 0 .5em;
+}
+
+.report-body > h1 {
+  font-size: 19pt;
+  break-before: page;
+  padding-bottom: 2.5mm;
+  border-bottom: 2px solid var(--accent);
+  margin-bottom: 6mm;
+}
+.report-body > h1:first-child { break-before: avoid; }
+
+.report-body > h2 { font-size: 13.5pt; margin-top: 8mm; }
+.report-body > h3 { font-size: 11.5pt; margin-top: 6mm; color: var(--ink); }
+
+ul, ol { margin: 0 0 .8em; padding-left: 1.4em; }
+li { margin-bottom: .25em; }
+
+strong { color: var(--accent-strong); }
+
+/* --------------------------------------------------------------------------
+   Cover page
+   -------------------------------------------------------------------------- */
+
+.cover {
+  position: relative;
+  height: 297mm;
+  box-sizing: border-box;
+  padding: 34mm 24mm 20mm;
+  border-top: 12mm solid var(--accent);
+  break-after: page;
+}
+.cover-logo    { height: 20mm; margin-bottom: 26mm; }
+.cover-doctype {
+  font-size: 12pt; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 3mm;
+}
+.cover-title {
+  font-size: 32pt; line-height: 1.15; margin: 0 0 3mm;
+  border: none; padding: 0;
+}
+.cover-subtitle {
+  font-size: 15pt; color: var(--muted); margin-bottom: 26mm;
+  text-align: left;
+}
+.cover-meta { width: 88mm; font-size: 10.5pt; border: none; }
+.cover-meta th {
+  text-align: left; color: var(--muted); font-weight: 600;
+  background: none; border: none; border-top: 1px solid var(--rule);
+  padding: 2.2mm 0; width: 30mm;
+}
+.cover-meta td {
+  border: none; border-top: 1px solid var(--rule); padding: 2.2mm 0;
+}
+.cover-class {
+  position: absolute; bottom: 24mm;
+  font-weight: 700; letter-spacing: .14em; color: var(--accent-strong);
+}
+
+/* --------------------------------------------------------------------------
+   Table of contents - page numbers resolved by WeasyPrint at layout time
+   -------------------------------------------------------------------------- */
+
+.toc { break-after: page; }
+.toc-heading { font-size: 19pt; border-bottom: 2px solid var(--accent);
+               padding-bottom: 2.5mm; margin-bottom: 6mm; }
+.toc-list { list-style: none; margin: 0; padding: 0; }
+.toc-list li { margin: 0; }
+.toc-list a {
+  display: block;
+  color: var(--ink);
+  text-decoration: none;
+}
+.toc-list a::after {
+  content: leader(". ") target-counter(attr(href), page);
+  color: var(--muted);
+}
+.toc-num  { display: inline-block; color: var(--muted); }
+.toc-l1 > a { font-weight: 700; margin-top: 3.2mm; color: var(--accent-strong); }
+.toc-l1 .toc-num { width: 9mm; }
+.toc-l2 > a { padding-left: 9mm; font-size: 10pt; }
+.toc-l2 .toc-num { width: 11mm; }
+.toc-l3 > a { padding-left: 20mm; font-size: 10pt; font-style: italic; }
+.toc-l3 .toc-num { width: 7mm; }
+
+/* --------------------------------------------------------------------------
+   Tables
+   -------------------------------------------------------------------------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9.5pt;
+  margin: 0 0 1em;
+  break-inside: auto;
+}
+thead { display: table-header-group; }   /* repeat headers across page breaks */
+tr { break-inside: avoid; }
+
+th, td {
+  border: 1px solid var(--rule);
+  padding: 1.8mm 2.4mm;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: var(--table-head);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+tbody tr:nth-child(even) td { background: var(--surface-alt); }
+
+caption {
+  caption-side: bottom;
+  font-size: 9pt; color: var(--muted); padding-top: 1.5mm;
+  text-align: left;
+}
+
+/* Summary of findings */
+.findings-summary td:first-child,
+.findings-summary th:first-child { width: 8mm; text-align: center; }
+.findings-summary th:nth-child(2) { width: 30mm; }
+.findings-summary th:last-child,
+.findings-summary td:last-child { width: 14mm; text-align: center; }
+.pageref a::after { content: target-counter(attr(href), page); }
+
+/* --------------------------------------------------------------------------
+   Severity pills and badges
+   -------------------------------------------------------------------------- */
+
+.sev-pill, .sev-badge {
+  display: inline-block;
+  padding: .5mm 2mm;
+  border-radius: 2px;
+  color: #fff;
+  font-size: 8.5pt;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sev-pill.sev-critical, .sev-badge.sev-critical { background: var(--critical); }
+.sev-pill.sev-high,     .sev-badge.sev-high     { background: var(--high); }
+.sev-pill.sev-low,      .sev-badge.sev-low      { background: var(--low); }
+.sev-pill.sev-info,     .sev-badge.sev-info     { background: var(--info); }
+/* Amber is too light to carry white text */
+.sev-pill.sev-medium,   .sev-badge.sev-medium   {
+  background: var(--medium);
+  color: #1c1e22;
+}
+
+/* --------------------------------------------------------------------------
+   Findings
+   -------------------------------------------------------------------------- */
+
+.finding {
+  break-before: page;
+  break-inside: auto;
+  margin-bottom: 8mm;
+}
+.finding:first-of-type { break-before: avoid; }
+
+.finding-head {
+  display: flex;
+  align-items: baseline;
+  padding: 2.5mm 3mm;
+  background: var(--table-head);
+  border-left: 4px solid var(--info);
+  break-after: avoid;
+}
+.finding.sev-critical .finding-head { border-left-color: var(--critical); }
+.finding.sev-high     .finding-head { border-left-color: var(--high); }
+.finding.sev-medium   .finding-head { border-left-color: var(--medium); }
+.finding.sev-low      .finding-head { border-left-color: var(--low); }
+
+/* Explicit margins rather than flex `gap`, which WeasyPrint does not apply. */
+.finding-num   { font-weight: 700; color: var(--muted); margin-right: 2.5mm; }
+.finding-title { font-size: 13pt; font-weight: 700; color: var(--accent-strong);
+                 flex: 1; margin-right: 3mm; }
+
+.finding-meta { margin-top: 0; font-size: 9.5pt; }
+.finding-meta th { width: 26mm; }
+.finding-meta .vector {
+  font-family: "DejaVu Sans Mono", monospace;
+  font-size: 8pt; color: var(--muted);
+}
+
+.finding-part { margin-top: 4mm; }
+.finding-part h4 {
+  font-size: 10.5pt;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--accent);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 1mm;
+  margin-bottom: 2.5mm;
+  break-after: avoid;
+}
+
+/* --------------------------------------------------------------------------
+   Code, command output and evidence
+   -------------------------------------------------------------------------- */
+
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  padding: 2.5mm 3mm;
+  font-family: "DejaVu Sans Mono", monospace;
+  font-size: 8pt;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  break-inside: avoid;      /* keep short blocks whole; long ones still split */
+  margin: 0 0 1em;
+}
+code {
+  font-family: "DejaVu Sans Mono", monospace;
+  font-size: 8.8pt;
+  background: var(--code-bg);
+  padding: .2mm 1mm;
+  border-radius: 2px;
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+
+/* Pandoc syntax highlighting tokens, tuned for the dark background */
+code span.co { color: #8b949e; font-style: italic; }   /* comment  */
+code span.st { color: #a5d6ff; }                       /* string   */
+code span.kw { color: #ff7b72; font-weight: 600; }     /* keyword  */
+code span.dt { color: #ffa657; }                       /* datatype */
+code span.dv, code span.fl, code span.bn { color: #79c0ff; }  /* numbers */
+code span.fu { color: #d2a8ff; }                       /* function */
+code span.er { color: #ff7b72; font-weight: 600; }     /* error    */
+code span.va { color: #ffa657; }                       /* variable */
+pre.sourceCode, div.sourceCode { margin: 0 0 1em; }
+div.sourceCode { background: none; border: none; }
+
+/* --------------------------------------------------------------------------
+   Figures - images are embedded into the PDF at build time
+   -------------------------------------------------------------------------- */
+
+body { counter-reset: figure; }
+figure {
+  margin: 0 0 1.2em;
+  text-align: center;
+  break-inside: avoid;
+}
+figure img, .report-body img {
+  max-width: 100%;
+  border: 1px solid var(--rule);
+}
+figcaption, .figure-caption {
+  counter-increment: figure;
+  font-size: 9pt;
+  color: var(--muted);
+  padding-top: 1.5mm;
+  text-align: center;
+}
+figcaption::before, .figure-caption::before {
+  content: "Figure " counter(figure) " - ";
+}
+
+/* --------------------------------------------------------------------------
+   Severity chart
+   -------------------------------------------------------------------------- */
+
+.chart { margin: 0 0 1.2em; break-inside: avoid; }
+.chart svg { max-width: 130mm; display: block; margin: 0 auto; }
+.c-label { font-size: 11px; fill: var(--ink); font-weight: 600; }
+.c-count { font-size: 11px; fill: var(--muted); }
+.c-bar.sev-critical { fill: var(--critical); }
+.c-bar.sev-high     { fill: var(--high); }
+.c-bar.sev-medium   { fill: var(--medium); }
+.c-bar.sev-low      { fill: var(--low); }
+.c-bar.sev-info     { fill: var(--info); }
+
+/* --------------------------------------------------------------------------
+   Misc
+   -------------------------------------------------------------------------- */
+
+blockquote {
+  margin: 0 0 1em;
+  padding: 2mm 3mm;
+  border-left: 3px solid var(--rule);
+  color: var(--muted);
+}
+hr { border: none; border-top: 1px solid var(--rule); margin: 6mm 0; }
+.empty-note { color: var(--muted); font-style: italic; }

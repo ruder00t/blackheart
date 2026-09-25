@@ -1,0 +1,61 @@
+module: neo4j
+name: Neo4j (7474 HTTP / 7687 Bolt)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version
+        commands: |
+          nmap -p7474,7687 -sV -sC $IP
+          curl -s http://$IP:7474/
+      - id: browser
+        text: Web console (default creds neo4j/neo4j -> forced change)
+        manual: true
+        commands: |
+          # http://$IP:7474  try neo4j/neo4j , neo4j/password , admin/admin
+
+  - id: enum
+    name: Enumeration (Cypher)
+    steps:
+      - id: cypher_http
+        text: Run Cypher over the HTTP API
+        commands: |
+          curl -s -u $USER:$PASS -H "Content-Type: application/json" -d '{"statements":[{"statement":"MATCH (n) RETURN n LIMIT 25"}]}' http://$IP:7474/db/neo4j/tx/commit
+      - id: cypher_shell
+        text: Run Cypher over Bolt (cypher-shell)
+        commands: |
+          cypher-shell -a bolt://$IP:7687 -u $USER -p $PASS
+          # MATCH (n) RETURN labels(n), count(*);
+      - id: labels
+        text: Enumerate labels / relationships / property keys
+        manual: true
+        commands: |
+          # CALL db.labels(); CALL db.relationshipTypes(); CALL db.propertyKeys();
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: default
+        text: Try default / weak credentials
+        commands: |
+          hydra -l neo4j -P $PASSLIST $IP -s 7474 http-get /
+      - id: dump_users
+        text: Read Neo4j auth store (native auth) - hashes
+        manual: true
+        commands: |
+          # file: data/dbms/auth  (SHA-256 + salt) -> hashcat -m 1420
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: rce
+        text: APOC / procedure abuse + known CVEs
+        manual: true
+        commands: |
+          searchsploit neo4j
+          # if APOC installed: apoc.load / procedures may allow file read / SSRF

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>Script library</h2>
+    <p>Your multi-line scripts and snippets. Placeholders substitute your engagement variables live; copy the whole body with one click. Saved to data/script_library.json.</p>
+  </div>
+
+  <div class="card">
+    <h3>Add script</h3>
+    <div class="field"><label>Name</label><input type="text" id="slName" placeholder="e.g. linux enum one-liner"></div>
+    <div class="field"><label>Script body</label><textarea id="slBody" class="bigfield" rows="8" placeholder="paste your script — use the buttons below for $VAR placeholders"></textarea></div>
+    <div class="tokrow" id="slToks"></div>
+    <div style="margin-top:10px"><button class="btn" id="slAdd">Add script</button></div>
+  </div>
+
+  <div id="slList"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.SCRIPTS = {{ data | tojson }};
+  window.VARKEYS = {{ varkeys | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/script_library.js') }}"></script>
+{% endblock %}

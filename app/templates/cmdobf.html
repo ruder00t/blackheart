@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>Cmd Obfuscator <span class="tag">bypass</span></h2>
+    <p>One command in &mdash; encoded and obfuscated forms out, for filter/WAF bypass, quote-hostile
+       injection points and constrained shells. Everything runs offline in the browser.
+       <code>$LHOST</code>/<code>$LPORT</code> are filled from your engagement variables.</p>
+  </div>
+
+  <div class="card">
+    <h3>Input command</h3>
+    <textarea id="obfIn" class="jwt-ta" style="min-height:64px;white-space:pre-wrap;word-break:break-all" spellcheck="false" autocomplete="off"></textarea>
+    <p class="hint" id="obfNote" style="margin-bottom:0">Edit above; every form below updates live. Click any line to copy.</p>
+  </div>
+
+  <div id="obfOut"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/cmdobf.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>JWT <span class="tag">crypto</span></h2>
+    <p>Decode, verify and sign JSON Web Tokens &mdash; fully offline in your browser (Web Crypto).
+       HS256/384/512, RS/PS256/384/512, ES256/384. Nothing is sent anywhere.</p>
+  </div>
+
+  <div class="jwt-grid">
+    <div class="card">
+      <h3>Encoded</h3>
+      <textarea id="jwtEncoded" class="jwt-ta jwt-token" spellcheck="false" autocomplete="off" placeholder="paste a JWT&hellip;"></textarea>
+      <p class="jwt-parts" id="jwtParts"></p>
+    </div>
+
+    <div class="card">
+      <h3>Decoded</h3>
+      <label class="jwt-lab hdr">Header</label>
+      <textarea id="jwtHeader" class="jwt-ta hdr" spellcheck="false" autocomplete="off"></textarea>
+      <label class="jwt-lab pay">Payload</label>
+      <textarea id="jwtPayload" class="jwt-ta pay" spellcheck="false" autocomplete="off"></textarea>
+      <div id="jwtClaims" class="jwt-claims"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Signature &amp; key</h3>
+    <div class="row">
+      <div class="field">
+        <label>Algorithm</label>
+        <select id="jwtAlg">
+          <optgroup label="HMAC">
+            <option>HS256</option><option>HS384</option><option>HS512</option>
+          </optgroup>
+          <optgroup label="RSA">
+            <option>RS256</option><option>RS384</option><option>RS512</option>
+            <option>PS256</option><option>PS384</option><option>PS512</option>
+          </optgroup>
+          <optgroup label="ECDSA">
+            <option>ES256</option><option>ES384</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="field" style="flex:1;min-width:260px">
+        <label id="jwtKeyLabel">Secret (HMAC)</label>
+        <textarea id="jwtKey" class="jwt-ta key" spellcheck="false" autocomplete="off" placeholder="shared secret, or PEM key"></textarea>
+      </div>
+    </div>
+    <label class="chip" style="margin-top:8px"><input type="checkbox" id="jwtB64"><span>secret is base64-encoded</span></label>
+    <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn" id="jwtVerify">Verify</button>
+      <button class="btn ghost" id="jwtSign">Sign / regenerate &#8635;</button>
+    </div>
+    <p id="jwtStatus" class="jwt-status"></p>
+    <p class="hint" id="jwtKeyHint" style="margin-top:10px"></p>
+  </div>
+
+  <div class="card">
+    <h3>Attacks</h3>
+    <p class="hint">All client-side. Forged tokens load into the Encoded box above so you can inspect them.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn ghost" id="jwtAlgNone">Forge alg:none</button>
+      <button class="btn ghost" id="jwtConfuse">RS&rarr;HS key confusion</button>
+    </div>
+    <label class="jwt-lab">Weak-secret brute (HMAC only) &mdash; candidates, one per line</label>
+    <textarea id="jwtWordlist" class="jwt-ta key" spellcheck="false" autocomplete="off">secret
+password
+changeme
+admin
+jwt
+your-256-bit-secret
+supersecret
+key
+private
+secretkey
+qwerty
+123456
+Sn1f</textarea>
+    <div style="margin-top:10px"><button class="btn" id="jwtBrute">Brute HS secret</button></div>
+    <pre id="jwtAtkOut" class="jwt-status info" style="white-space:pre-wrap;word-break:break-all;margin-top:12px"></pre>
+    <div class="jwt-claims" style="margin-top:12px">
+      <table>
+        <tr><td class="k">alg:none</td><td class="v">server trusts the header alg &rarr; strip the signature. Try <code>none/None/NONE/nOnE</code>.</td></tr>
+        <tr><td class="k">RS&rarr;HS</td><td class="v">server verifies RS256 with a public key but doesn't pin the alg &rarr; sign HS256 using that public key as the HMAC secret.</td></tr>
+        <tr><td class="k">kid</td><td class="v">path traversal (<code>kid=../../../dev/null</code> &rarr; empty key, then sign with an empty secret) &middot; SQLi &middot; command injection in the kid lookup.</td></tr>
+        <tr><td class="k">jku / x5u</td><td class="v">point the header at an attacker-hosted JWKS / cert and forge with your own key when the URL isn't allow-listed.</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/jwt.js') }}"></script>
+{% endblock %}

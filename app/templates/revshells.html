@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>Reverse shells</h2>
+    <p>Prefilled from your attacker variables. Pick an OS and shell; change the encoding and it regenerates.</p>
+  </div>
+  <div class="card">
+    <div class="row">
+      <div class="field"><label>Listen host <code>$LHOST</code></label><input type="text" id="rsHost"></div>
+      <div class="field"><label>Listen port <code>$LPORT</code></label><input type="text" id="rsPort"></div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>OS</label>
+        <div class="seg" id="rsOS">
+          <button type="button" data-os="linux" class="on">Linux</button>
+          <button type="button" data-os="windows">Windows</button>
+          <button type="button" data-os="mac">Mac</button>
+          <button type="button" data-os="all">All</button>
+        </div>
+      </div>
+      <div class="field"><label>Shell</label><select id="rsType"></select></div>
+      <div class="field"><label>Encoding</label>
+        <select id="rsEnc">
+          <option value="raw">raw</option>
+          <option value="base64">base64</option>
+          <option value="url">url</option>
+        </select>
+      </div>
+    </div>
+    <div id="rsOut"></div>
+  </div>
+
+  <div class="pane-head" style="margin-top:26px">
+    <h2>Webshells <span class="tag">subchapter</span></h2>
+    <p>File-based shells you upload to a target and reach over HTTP — for when an outbound reverse shell is blocked. Code blocks copy verbatim; tool commands substitute your variables.</p>
+  </div>
+  {{ webshells | safe }}
+</section>
+{% endblock %}
+{% block scripts %}
+<script>window.SHELLS = {{ shells | tojson }};</script>
+<script src="{{ url_for('static', filename='js/revshells.js') }}"></script>
+<script>
+// raw copy for webshell code (no $VAR substitution — keeps $_GET etc. intact)
+document.querySelectorAll(".wscode[data-raw]").forEach(function (el) {
+  var b = document.createElement("button");
+  b.className = "copy"; b.textContent = "copy";
+  b.addEventListener("click", function () {
+    navigator.clipboard.writeText(el.dataset.raw).then(function () {
+      b.textContent = "copied"; b.classList.add("ok");
+      var t = document.getElementById("toast");
+      if (t) { t.classList.add("show"); setTimeout(function(){t.classList.remove("show");}, 1000); }
+      setTimeout(function () { b.textContent = "copy"; b.classList.remove("ok"); }, 1200);
+    });
+  });
+  el.appendChild(b);
+});
+</script>
+{% endblock %}

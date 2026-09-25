@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>{{ title }} <span class="tag">{{ tag }}</span></h2>
+    <p>{{ blurb }}</p>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <form method="post" action="{{ url_for(update_endpoint) }}" style="margin:0">
+        <button class="btn" type="submit">Update</button>
+      </form>
+      {% if built %}
+        <a class="btn ghost" href="{{ open_url }}" target="_blank" rel="noopener">Open &#8599;</a>
+      {% else %}
+        <span class="btn ghost" style="opacity:.45;cursor:not-allowed">Open &#8599;</span>
+      {% endif %}
+      <div style="margin-left:4px">
+        <p style="margin:0;color:var(--bone-dim);font-size:13px">{{ status.message }}</p>
+        {% if status.last_update %}<span style="color:var(--bone-faint);font-size:11.5px">last update: {{ status.last_update }} &middot; {{ status.count }} {{ unit or 'entries' }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="hint" style="margin:0">
+      Update pulls the latest data over HTTPS and rebuilds a single searchable page &mdash; no git, no Docker.
+      {% if not built %}The <b>Open</b> button unlocks once a build succeeds.{% else %}Open launches it in a new tab; it works with no connection.{% endif %}
+      Needs outbound access to <code>codeload.github.com</code> at update time only.
+    </p>
+  </div>
+</section>
+{% endblock %}

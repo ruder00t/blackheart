@@ -1,0 +1,72 @@
+:root{
+  --bg:#0a0a0c; --panel:#141416; --panel2:#1b1b1f; --border:#2a2a2f;
+  --fg:#e9e4d6; --muted:#a6a196; --accent:#c1121f; --accent2:#e11d2a;
+  --ok:#3fb950; --strike:#6f6c64; --warn:#d29922; --danger:#f85149;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  font-size:15px;line-height:1.5}
+header{padding:20px 28px;border-bottom:1px solid var(--border);
+  background:#08080a}
+header h1{margin:0;font-size:20px;letter-spacing:.5px}
+header h1 .brand-map{color:var(--accent)}
+header .meta{color:var(--muted);font-size:13px;margin-top:6px}
+.wrap{max-width:1000px;margin:0 auto;padding:24px 28px 80px}
+
+.banner{border:1px solid var(--border);border-radius:8px;padding:14px 16px;
+  margin-bottom:24px;background:var(--panel)}
+.banner.known{border-left:4px solid var(--danger);background:rgba(220,50,50,.06)}
+.banner.unknown{border-left:4px solid var(--danger);background:rgba(220,50,50,.06)}
+.banner.filtered{border-left:4px solid var(--muted);background:rgba(140,140,140,.05)}
+.banner h3{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.5px}
+.banner .note{margin:0 0 8px;font-size:12.5px;color:var(--muted)}
+.banner ul{margin:0;padding-left:18px;color:var(--muted);font-family:var(--mono);font-size:13px}
+
+.svc{border:1px solid var(--border);border-radius:8px;margin-bottom:20px;overflow:hidden}
+.svc>summary{cursor:pointer;list-style:none;padding:14px 18px;background:var(--panel2);
+  font-weight:600;display:flex;align-items:center;gap:12px;user-select:none}
+.svc>summary::-webkit-details-marker{display:none}
+.svc>summary .tag{font-family:var(--mono);font-size:12px;color:var(--muted);font-weight:400}
+.svc>summary .pill{font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--border)}
+.pill.https{color:var(--ok);border-color:var(--ok)}
+.pill.http{color:var(--accent2);border-color:var(--accent2)}
+
+.section{border-top:1px solid var(--border)}
+.section>summary{cursor:pointer;list-style:none;padding:11px 18px;font-weight:600;
+  font-size:14px;color:var(--accent);user-select:none;display:flex;gap:8px;align-items:center}
+.section>summary::-webkit-details-marker{display:none}
+.section>summary .count{color:var(--muted);font-weight:400;font-size:12px}
+
+.step{padding:8px 18px 8px 18px;border-top:1px solid #1f1f23}
+.step:first-child{border-top:none}
+.step-head{display:flex;align-items:flex-start;gap:10px}
+.cb{flex:0 0 auto;width:18px;height:18px;border:2px solid var(--border);border-radius:4px;
+  cursor:pointer;margin-top:2px;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;background:transparent;color:transparent;transition:.1s}
+.cb.checked{background:var(--ok);border-color:var(--ok);color:#0a0a0c}
+.cb.crossed{border-color:var(--strike);color:var(--strike);background:transparent}
+.step.crossed .step-text{text-decoration:line-through;color:var(--strike)}
+.step-text{flex:1;cursor:pointer}
+.flags{display:inline-flex;gap:6px;margin-left:8px;vertical-align:middle}
+.flag{font-size:10px;padding:1px 6px;border-radius:3px;font-weight:600;letter-spacing:.3px}
+.flag.manual{background:#3d2f00;color:var(--warn)}
+.flag.authorized{background:#3d0f0f;color:var(--danger)}
+.cmd-toggle{margin:6px 0 2px 28px;font-size:12px;color:var(--accent2);cursor:pointer;
+  background:none;border:none;padding:0;font-family:inherit}
+.cmds{margin:6px 0 4px 28px;display:none}
+.cmds.open{display:block}
+.cmd{display:flex;align-items:stretch;gap:0;margin:5px 0;border:1px solid var(--border);
+  border-radius:6px;overflow:hidden;background:#0d0d10}
+.cmd code{flex:1;padding:8px 10px;font-family:var(--mono);font-size:12.5px;
+  white-space:pre-wrap;word-break:break-all;color:#d6dee8}
+.cmd button{flex:0 0 auto;border:none;border-left:1px solid var(--border);
+  background:var(--panel2);color:var(--muted);cursor:pointer;padding:0 12px;font-size:12px}
+.cmd button:hover{color:var(--fg);background:#2a3140}
+.cmd button.copied{color:var(--ok)}
+.controls{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.controls button{background:var(--panel2);color:var(--fg);border:1px solid var(--border);
+  border-radius:6px;padding:7px 12px;cursor:pointer;font-size:13px}
+.controls button:hover{border-color:var(--accent)}
+.progress{color:var(--muted);font-size:13px;margin-left:auto;align-self:center}

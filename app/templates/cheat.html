@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>{{ title }}{% if tag %} <span class="tag">{{ tag }}</span>{% endif %}</h2>
+    {% if intro %}<p>{{ intro }}</p>{% endif %}
+  </div>
+  {% for card in cards %}
+  <div class="card">
+    {% if card.title %}<h3>{{ card.title }}</h3>{% endif %}
+    {% if card.hint %}<p class="hint">{{ card.hint }}</p>{% endif %}
+    {% for b in card.blocks %}
+    <div class="cmd{% if b.plain %} plain{% endif %}" data-tpl="{{ b.tpl }}">{% if b.lbl %}<span class="lbl">{{ b.lbl }}</span>{% endif %}</div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+{% endblock %}

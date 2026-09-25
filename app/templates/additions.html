@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>Additions <span class="tag">overlay</span></h2>
+    <p>Append your own notes and commands to any existing tab without editing the program. Entries show up on their target tab in the normal style, with a copy button. Saved to data/additions.json — use export/import to carry them across program updates.</p>
+  </div>
+
+  <div class="card">
+    <h3>Add an entry</h3>
+    <div class="row">
+      <div class="field" style="flex:1;min-width:240px">
+        <label>Target tab</label>
+        <select id="addTarget">
+          {% for t in targets %}<option value="{{ t.id }}">{{ t.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Position</label>
+        <div class="seg" id="addPos">
+          <button type="button" data-pos="bottom" class="on">Bottom</button>
+          <button type="button" data-pos="top">Top</button>
+        </div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Command / note</label>
+      <input type="text" id="addText" placeholder="text — use the buttons for placeholders">
+    </div>
+    <div class="tokrow" id="addToks"></div>
+    <div style="margin-top:10px"><button class="btn" id="addBtn">Add to tab</button></div>
+  </div>
+
+  <div class="card">
+    <h3>Backup</h3>
+    <p class="hint">Export before updating the program; import afterwards to restore everything.</p>
+    <div class="row" style="margin-bottom:0">
+      <a class="btn ghost" id="addExport" href="/api/additions/export">Export JSON</a>
+      <button class="btn ghost" id="addImportBtn">Import JSON…</button>
+      <input type="file" id="addImport" accept="application/json,.json" style="display:none">
+    </div>
+  </div>
+
+  <div id="addList"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.ADD_STATE = {{ additions | tojson }};
+  window.ADD_TARGETS = {{ targets | tojson }};
+  window.VARKEYS = {{ varkeys | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/additions.js') }}"></script>
+{% endblock %}

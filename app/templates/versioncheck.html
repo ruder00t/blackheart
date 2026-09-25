@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .vc-badge{display:inline-block;min-width:58px;text-align:center;font-size:11px;
+    font-weight:700;letter-spacing:.03em;padding:3px 8px;border-radius:5px;text-transform:uppercase}
+  .vc-green{background:rgba(63,185,80,.14);color:#4ac26b;border:1px solid rgba(63,185,80,.35)}
+  .vc-red{background:rgba(193,18,31,.16);color:var(--red-bright);border:1px solid var(--red-dim)}
+  .vc-grey{background:var(--panel-2);color:var(--bone-faint);border:1px solid var(--border)}
+  table.vc{width:100%;border-collapse:collapse;font-size:13px}
+  table.vc th{text-align:left;color:var(--bone-faint);font-size:11px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.04em;padding:0 12px 9px;border-bottom:1px solid var(--border)}
+  table.vc td{padding:11px 12px;border-bottom:1px solid var(--border-soft);color:var(--bone);vertical-align:middle}
+  table.vc td.mono{font-family:var(--mono);font-size:12.5px}
+  table.vc td.note{color:var(--bone-dim);font-size:12px}
+  .vc-status{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .vc-status .msg{color:var(--bone-dim);font-size:13px;margin:0}
+  .vc-status .when{color:var(--bone-faint);font-size:11.5px}
+  .vc-tally{color:var(--bone-dim);font-size:12.5px;margin:0 0 14px}
+  .vc-tally b{color:var(--bone)}
+  textarea.vc-in{width:100%;min-height:150px;background:var(--panel-2);border:1px solid var(--border);
+    color:var(--bone);font-family:var(--mono);font-size:12.5px;border-radius:var(--radius);
+    padding:11px 13px;resize:vertical;box-sizing:border-box}
+  textarea.vc-in:focus{outline:2px solid var(--red);border-color:var(--red)}
+  .vc-manual{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap}
+  .vc-manual .field{margin:0}
+</style>
+
+<section class="pane">
+  <div class="pane-head">
+    <h2>VersionCheck <span class="tag">recon</span></h2>
+    <p>Fingerprint a target with WhatWeb, paste the JSON, and every detected product is graded against the latest release: green is current, red is behind, grey is unknown or unversioned.</p>
+  </div>
+
+  <div class="card">
+    <div class="vc-status">
+      <form method="post" action="{{ url_for('versioncheck.update') }}" style="margin:0">
+        <button class="btn ghost" type="submit">Update now</button>
+      </form>
+      <div>
+        <p class="msg">{{ status.message }}</p>
+        {% if status.last_run %}<span class="when">last update: {{ status.last_run }} &middot; {{ status.count }} products cached</span>{% endif %}
+        {% if status.failed %}<br><span class="when" style="color:var(--red-bright)">unreachable: {{ status.failed|join(', ') }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Fingerprint the target</h3>
+    <p class="hint">Run this, then paste <span style="font-family:var(--mono);color:var(--bone)">whatweb.json</span> below. <code>-a 3</code> pulls version strings; the timeouts stop it hanging on a slow host.</p>
+    <div class="cmd" data-tpl="{{ suggest }}"></div>
+  </div>
+
+  <div class="card">
+    <h3>From an nmap scan</h3>
+    <p class="hint">Upload an <span style="font-family:var(--mono);color:var(--bone)">nmap -sV -oX scan.xml</span> result &mdash; service products and versions are picked up automatically. XML is richest; grepable/normal parse but rarely carry versions.</p>
+    <form method="post" enctype="multipart/form-data">
+      <input type="file" name="nmap" accept=".xml,.gnmap,.nmap,.txt" required
+             style="color:var(--bone-dim);font-size:13px;margin-bottom:14px;display:block">
+      <button class="btn" type="submit">Check from scan</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Paste scan output</h3>
+    <p class="hint">WhatWeb <span style="font-family:var(--mono);color:var(--bone)">--log-json</span>, or Wappalyzer / httpx JSON. Array, single object, or line-delimited all parse.</p>
+    <form method="post">
+      <textarea class="vc-in" name="scan" spellcheck="false"
+        placeholder='[{"target":"http://...","plugins":{"WordPress":{"version":["6.2"]},"jQuery":{"version":["3.5.1"]},"nginx":{"version":["1.18.0"]}}}]'>{{ request.form.get('scan','') if submitted and not request.form.get('product') }}</textarea>
+      <div style="margin-top:14px"><button class="btn" type="submit">Check versions</button></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Manual check</h3>
+    <p class="hint">One product by hand. Same grading.</p>
+    <form method="post" class="vc-manual">
+      <div class="field" style="min-width:220px">
+        <label>Product</label>
+        <input type="text" name="product" placeholder="jQuery" value="{{ request.form.get('product','') if submitted }}">
+      </div>
+      <div class="field" style="min-width:160px">
+        <label>Version</label>
+        <input type="text" name="version" placeholder="3.5.1" value="{{ request.form.get('version','') if submitted }}">
+      </div>
+      <button class="btn" type="submit">Check</button>
+    </form>
+  </div>
+
+  {% if submitted %}
+    {% if rows %}
+    <div class="card">
+      <h3>Results</h3>
+      <p class="vc-tally"><b>{{ counts.red }}</b> outdated &middot; <b>{{ counts.green }}</b> current &middot; <b>{{ counts.grey }}</b> unknown</p>
+      <table class="vc">
+        <thead><tr><th>Status</th><th>Technology</th><th>Detected</th><th>Latest</th><th>Note</th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+          <tr>
+            <td><span class="vc-badge vc-{{ r.state }}">{{ r.state }}</span></td>
+            <td>{{ r.name }}</td>
+            <td class="mono">{{ r.version or '\u2014' }}</td>
+            <td class="mono">{{ r.latest or '\u2014' }}</td>
+            <td class="note">{{ r.note }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card"><p style="margin:0;color:var(--bone-dim)">Nothing parsed out of that input. Check it's WhatWeb / Wappalyzer / httpx JSON.</p></div>
+    {% endif %}
+
+    {% if any_red %}
+    <div class="card" style="border-color:var(--red-dim)">
+      <h3>Reds &mdash; worth a look</h3>
+      <p class="hint">Outdated doesn't mean vulnerable, but it's the first thing worth checking. Start here.</p>
+      {% for r in rows if r.state == 'red' %}
+      <div class="cmd" data-tpl="searchsploit {{ r.name }} {{ r.version }}"></div>
+      {% endfor %}
+      <div class="cmd" data-tpl="nuclei -u http://$RHOST -tags cve"></div>
+      <div class="cmd" data-tpl="msfconsole -q -x 'search &lt;product&gt;; exit'"></div>
+      <div class="cmd plain" data-tpl="check HackTricks and the vendor advisory for the product + version">
+        <span class="lbl">then read up</span>
+      </div>
+    </div>
+    {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

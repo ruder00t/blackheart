@@ -1,0 +1,66 @@
+module: sip
+name: SIP / VoIP (5060 / 5061)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / methods + server banner
+        commands: |
+          nmap -sU -sV -p$PORT $IP
+          nmap -p$PORT --script=sip-methods $IP
+      - id: options
+        text: Send an OPTIONS request (identify UA / PBX)
+        commands: |
+          sipsak -vv -s sip:$IP:$PORT
+          svmap $IP
+
+  - id: enum
+    name: Extension / User Enumeration
+    steps:
+      - id: svwar
+        text: Enumerate valid extensions
+        commands: |
+          svwar -e100-999 -m INVITE $IP
+          nmap -sU -p$PORT --script=sip-enum-users $IP
+      - id: register
+        text: Note registrable extensions (open registration)
+        manual: true
+        commands: |
+          # svwar reporting reqauth=no => extension registers without a password
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: svcrack
+        text: Brute-force extension passwords
+        commands: |
+          svcrack -u <ext> -d $PASSLIST $IP
+      - id: brute_msf
+        text: Enumerate + brute via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/sip/enumerator; set RHOSTS $IP; run; exit"
+          msfconsole -qx "use auxiliary/scanner/sip/options; set RHOSTS $IP; run; exit"
+
+  - id: attacks
+    name: Attacks & Post-Access
+    steps:
+      - id: register_hijack
+        text: Register-hijack an extension to intercept calls
+        manual: true
+        commands: |
+          # with a cracked/open ext, REGISTER your endpoint to receive its calls
+      - id: eavesdrop
+        text: Capture + reconstruct RTP audio (if on-path)
+        manual: true
+        commands: |
+          # wireshark: Telephony > VoIP Calls > Play  (or rtpbreak / sipdump)
+      - id: toll_fraud
+        text: Note toll-fraud / INVITE abuse surface
+        manual: true
+        commands: |
+          # test outbound INVITE through the PBX with a cracked ext

@@ -1,0 +1,62 @@
+module: mqtt
+name: MQTT (1883 / 8883)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / broker detection
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=mqtt-subscribe $IP
+      - id: connect
+        text: Test anonymous connect
+        commands: |
+          mosquitto_sub -h $IP -p $PORT -t '$SYS/#' -v
+          mosquitto_sub -h $IP -p $PORT -t '$SYS/broker/version' -v
+
+  - id: enum
+    name: Topic Enumeration
+    steps:
+      - id: wildcard
+        text: Subscribe to all topics (wildcard) and watch traffic
+        commands: |
+          mosquitto_sub -h $IP -p $PORT -t '#' -v
+      - id: tls
+        text: Same over TLS (8883)
+        tls_only: true
+        commands: |
+          mosquitto_sub -h $IP -p $PORT -t '#' -v --cafile ca.crt
+          mosquitto_sub -h $IP -p $PORT -t '#' -v --tls-use-os-certs
+
+  - id: creds
+    name: Authentication
+    authorized: true
+    steps:
+      - id: authed
+        text: Connect with credentials
+        commands: |
+          mosquitto_sub -h $IP -p $PORT -u $USER -P '$PASS' -t '#' -v
+      - id: brute
+        text: Brute-force broker credentials
+        commands: |
+          nmap -p$PORT --script=mqtt-subscribe --script-args="mqtt.username=$USER,mqtt.password=$PASS" $IP
+          # or an mqtt brute script looping $USER/$PASS with mosquitto_sub
+
+  - id: attacks
+    name: Data Access & Injection
+    steps:
+      - id: loot
+        text: Hunt sensitive data in topics (sensors, creds, commands)
+        manual: true
+        commands: |
+          # watch '#' for device state, tokens, geo, control channels
+      - id: publish
+        text: Publish to a control topic (authorized only)
+        authorized: true
+        manual: true
+        commands: |
+          mosquitto_pub -h $IP -p $PORT -t '<control/topic>' -m '<payload>'

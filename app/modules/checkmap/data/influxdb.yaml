@@ -1,0 +1,54 @@
+module: influxdb
+name: InfluxDB (8086)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version (header leaks it)
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          curl -sI http://$IP:$PORT/ping
+
+  - id: vuln
+    name: Authentication Bypass
+    steps:
+      - id: jwt_bypass
+        text: CVE-2019-20933 - JWT auth bypass (empty shared secret)
+        commands: |
+          searchsploit influxdb
+          # python3 influxdb_exploit.py $IP $PORT  (forge JWT with empty secret)
+
+  - id: enum
+    name: Database Enumeration (v1 query API)
+    steps:
+      - id: show_dbs
+        text: List databases
+        commands: |
+          curl -s -G "http://$IP:$PORT/query?pretty=true" --data-urlencode "q=SHOW DATABASES"
+      - id: authed_dbs
+        text: List databases with credentials
+        commands: |
+          curl -s -G "http://$IP:$PORT/query" -u $USER:$PASS --data-urlencode "q=SHOW DATABASES"
+      - id: measurements
+        text: List measurements + dump points
+        commands: |
+          curl -s -G "http://$IP:$PORT/query" --data-urlencode "db=<db>" --data-urlencode "q=SHOW MEASUREMENTS"
+          curl -s -G "http://$IP:$PORT/query" --data-urlencode "db=<db>" --data-urlencode "q=SELECT * FROM <measurement> LIMIT 100"
+
+  - id: creds
+    name: Credentials
+    authorized: true
+    steps:
+      - id: users
+        text: Enumerate users (needs admin)
+        commands: |
+          curl -s -G "http://$IP:$PORT/query" -u $USER:$PASS --data-urlencode "q=SHOW USERS"
+      - id: loot
+        text: Hunt secrets in time-series data
+        manual: true
+        commands: |
+          # metrics often embed hostnames, tokens, internal IPs, app telemetry

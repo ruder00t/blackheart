@@ -1,0 +1,74 @@
+module: printer
+name: Printers - LPD / JetDirect / IPP (515 / 9100 / 631)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / identify make + model
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p515,631,9100 --script=printer-info $IP
+      - id: banner
+        text: Raw banner (JetDirect 9100 speaks PJL/PostScript directly)
+        commands: |
+          nc -nv $IP $PORT
+
+  - id: enum
+    name: Enumeration (PRET)
+    steps:
+      - id: pret_pjl
+        text: Connect with PRET over PJL (9100)
+        commands: |
+          python3 pret.py $IP pjl
+          # then: info id ; info config ; env ; nvram dump
+      - id: pret_ps
+        text: Connect with PRET over PostScript
+        commands: |
+          python3 pret.py $IP ps
+      - id: filesystem
+        text: Browse the printer filesystem
+        manual: true
+        commands: |
+          # in PRET: ls / ; get <file> ; cat passwd  (many devices expose FS)
+
+  - id: creds
+    name: Credentials & Config
+    steps:
+      - id: web_admin
+        text: Check the embedded web admin (default creds)
+        manual: true
+        commands: |
+          # http(s)://$IP  -> admin/admin, admin/<blank>, admin/1234
+      - id: snmp
+        text: Pull config/creds via SNMP (see SNMP tab, community public)
+        commands: |
+          snmpwalk -v2c -c public $IP 1.3.6.1.2.1.43
+
+  - id: exploit
+    name: Loot & Abuse
+    steps:
+      - id: capture_jobs
+        text: Capture / retain print jobs (grab documents)
+        manual: true
+        commands: |
+          # PRET: capture on   -> subsequent jobs saved on device, then get them
+      - id: creds_loot
+        text: Extract stored credentials (LDAP/SMTP/SMB scan-to-folder)
+        manual: true
+        commands: |
+          # MFPs store domain creds for scan-to-folder/email — often recoverable
+          # PRET nvram dump ; or downgrade LDAP to pass-back attack
+      - id: passback
+        text: LDAP/SMTP pass-back attack (point printer at your listener)
+        manual: true
+        commands: |
+          # set the device LDAP/SMTP server to <LHOST>, run responder/ldap, hit "test"
+      - id: lpd_inject
+        text: LPD command surface (515) - legacy injection
+        manual: true
+        commands: |
+          # old lpd stacks: filename field command injection via lpr/lprm

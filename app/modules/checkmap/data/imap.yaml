@@ -1,0 +1,69 @@
+module: imap
+name: IMAP (143 / 993)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version + capabilities
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=imap-capabilities $IP
+      - id: banner
+        text: Banner grab (plain)
+        commands: |
+          nc -nv $IP $PORT
+      - id: banner_tls
+        text: Banner grab over TLS (993)
+        tls_only: true
+        commands: |
+          openssl s_client -connect $IP:$PORT -crlf
+
+  - id: enum
+    name: Enumeration
+    steps:
+      - id: ntlm_info
+        text: Leak host/domain via NTLM (if AUTH NTLM offered)
+        commands: |
+          nmap -p$PORT --script=imap-ntlm-info $IP
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Credential brute-force
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST imap://$IP -s $PORT
+          hydra -L $USERLIST -P $PASSLIST imaps://$IP -s $PORT
+          nmap -p$PORT --script=imap-brute $IP
+      - id: brute_msf
+        text: Brute-force via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/imap/imap_login; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+
+  - id: access
+    name: Mailbox Access & Loot
+    steps:
+      - id: login
+        text: Authenticate, list folders, fetch mail (plain)
+        commands: |
+          nc -nv $IP $PORT
+          # a LOGIN <user> <pass>
+          # a LIST "" "*"
+          # a SELECT INBOX
+          # a FETCH 1 BODY[]
+      - id: login_tls
+        text: Authenticate over TLS (993)
+        tls_only: true
+        commands: |
+          openssl s_client -connect $IP:$PORT -crlf
+          # a LOGIN <user> <pass> / a LIST "" "*" / a SELECT INBOX / a FETCH 1 BODY[]
+      - id: loot
+        text: Read messages for creds / password resets / internal info
+        manual: true
+        commands: |
+          # a SEARCH ALL ; a FETCH <n> BODY[] ; grep for secrets

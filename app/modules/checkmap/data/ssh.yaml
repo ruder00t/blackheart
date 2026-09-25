@@ -1,0 +1,141 @@
+module: ssh
+name: SSH (22 / 2222)
+inputs: [USERS, PASS, OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / version + default scripts
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nc -nv $IP $PORT
+      - id: banner
+        text: Banner / login banner grab
+        commands: |
+          nc -nv $IP $PORT
+          ssh $IP -p $PORT
+      - id: verbose_handshake
+        text: Observe key exchange / offered auth via verbose connect
+        manual: true
+        commands: |
+          ssh -v $IP -p $PORT
+
+  - id: fingerprint
+    name: Fingerprinting & Algorithm Enumeration
+    steps:
+      - id: algos
+        text: Enumerate supported algorithms
+        commands: |
+          nmap -p$PORT --script=ssh2-enum-algos $IP
+          ssh-audit $IP -p $PORT
+      - id: hostkey
+        text: Retrieve host keys / check weak keys
+        commands: |
+          nmap -p$PORT --script=ssh-hostkey --script-args ssh_hostkey=full $IP
+      - id: weak_config
+        text: Identify weak ciphers / MACs / kex / SSHv1
+        commands: |
+          ssh-audit $IP -p $PORT
+          nmap -p$PORT --script=sshv1 $IP
+      - id: software_id
+        text: Identify daemon (OpenSSH / Dropbear) and version
+        commands: |
+          nmap -p$PORT -sV $IP
+
+  - id: auth
+    name: Authentication Surface & Enumeration
+    steps:
+      - id: auth_methods
+        text: Enumerate accepted authentication methods
+        commands: |
+          nmap -p$PORT --script=ssh-auth-methods --script-args="ssh.user=root" $IP
+          ssh -v $IP -p $PORT
+      - id: user_enum
+        text: Username enumeration (timing / version-specific)
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/ssh/ssh_enumusers; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; run; exit"
+      - id: pubkey_accept
+        text: Test candidate public/private keys for acceptance
+        commands: |
+          nmap -p$PORT --script=ssh-publickey-acceptance --script-args="ssh.user=root,publickeys={./id_rsa.pub}" $IP
+          ssh -i ./id_rsa $IP -p $PORT
+
+  - id: vuln
+    name: Vulnerability Identification (fingerprint-driven)
+    steps:
+      - id: cve_map
+        text: Version to CVE mapping
+        commands: |
+          searchsploit openssh
+          searchsploit dropbear
+      - id: script_vuln
+        text: Script-based vuln checks
+        commands: |
+          nmap -p$PORT --script=vuln $IP
+      - id: terrapin
+        text: Terrapin / downgrade + weak-crypto exposure
+        commands: |
+          ssh-audit $IP -p $PORT
+      - id: eol_check
+        text: Flag EOL / outdated daemon
+        manual: true
+        commands: |
+          # cross-reference banner version against vendor support status
+
+  - id: creds
+    name: Default & Weak Credentials
+    authorized: true
+    steps:
+      - id: brute
+        text: Credential brute-force
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST ssh://$IP:$PORT -t 4 -f
+          ncrack -p$PORT --user $USER -P $PASSLIST ssh://$IP
+          medusa -h $IP -U $USERLIST -P $PASSLIST -M ssh -n $PORT
+          nmap -p$PORT --script=ssh-brute --script-args userdb=$USERLIST,passdb=$PASSLIST $IP
+      - id: brute_msf
+        text: Brute-force via Metasploit
+        commands: |
+          msfconsole -qx "use auxiliary/scanner/ssh/ssh_login; set RHOSTS $IP; set RPORT $PORT; set USER_FILE $USERLIST; set PASS_FILE $PASSLIST; run; exit"
+      - id: default_creds
+        text: Device / vendor default credentials
+        manual: true
+        commands: |
+          # test known defaults for the identified device/appliance
+
+  - id: keys
+    name: Key Material & Post-Access Notes
+    steps:
+      - id: crack_key
+        text: Crack a captured encrypted private key
+        commands: |
+          ssh2john id_rsa > id_rsa.hash
+          john --wordlist=$PASSLIST id_rsa.hash
+      - id: known_weak_keys
+        text: Check against known weak/debian keys
+        manual: true
+        commands: |
+          # compare host/user keys against rapid7/ssh-badkeys
+      - id: tunnel_notes
+        text: Note pivot / tunneling capability
+        manual: true
+        commands: |
+          ssh -L <localPort>:<remoteHost>:<remotePort> <user>@$IP -p $PORT
+
+  - id: exploit
+    name: Exploitation
+    authorized: true
+    steps:
+      - id: brute
+        text: "Brute force / key auth"
+        commands: |
+          hydra -L $USERLIST -P $PASSLIST ssh://$IP -t4
+          ssh -i id_rsa $USER@$IP
+      - id: userenum
+        text: "Username enumeration (older OpenSSH)"
+        commands: |
+          # CVE-2018-15473 user enumeration
+          searchsploit openssh <version>

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane" id="home">
+  <div class="hero">
+    <img class="logo" src="{{ url_for('static', filename='img/logo.svg') }}" alt="">
+    <div>
+      <h2>Blackheart</h2>
+      <p>One place for the tools, one set of variables feeding all of them.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Engagement variables</h3>
+    <p class="hint">Set once here. Every tool substitutes these live — blank fields stay literal placeholders. Save writes them to data/vars.json.</p>
+    <div class="grid" id="varGrid">
+      {% for key, label, default in varfields %}
+      <div class="field">
+        <label>{{ label }} <code>${{ key }}</code></label>
+        <input type="text" data-var="{{ key }}" placeholder="${{ key }}" value="{{ gvars[key] }}">
+      </div>
+      {% endfor %}
+    </div>
+    <div style="margin-top:20px;display:flex;gap:10px;align-items:center">
+      <button class="btn" id="saveVars">Save variables</button>
+      <span style="color:var(--bone-faint);font-size:12px">saved to data/vars.json</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Live substitution</h3>
+    <p class="hint">Updates as you edit the fields above.</p>
+    <div class="cmd" data-tpl="nmap -sV -p- $RHOST -oX scan.xml"></div>
+    <div class="cmd" data-tpl="ffuf -u http://$RHOST:$RPORT/FUZZ -w $WORDLIST"></div>
+  </div>
+
+  <div class="card">
+    <h3>New project</h3>
+    <p class="hint">Starting a fresh target? Clear the target-specific fields (RHOST, RPORT, DOMAIN, USER, PASS) and keep your own setup (LHOST, ports, wordlists). Or reset everything to defaults.</p>
+    <div class="row" style="margin-bottom:0">
+      <button class="btn" id="newProject">New project</button>
+      <button class="btn ghost" id="resetDefaults">Reset to defaults</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Backup &amp; restore</h3>
+    <p class="hint">Export every saved setting (variables, libraries, additions, day0, notes, loot — all of data/) as one file. Import it on another machine or after re-downloading Blackheart to restore the whole engagement.</p>
+    <div class="row" style="margin-bottom:0">
+      <a class="btn ghost" href="/api/backup/export">Export all</a>
+      <button class="btn ghost" id="importAllBtn">Import all…</button>
+      <input type="file" id="importAll" accept="application/json,.json" style="display:none">
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.VAR_DEFAULTS = { {% for k, l, d in varfields %}"{{ k }}": {{ d | tojson }}{% if not loop.last %}, {% endif %}{% endfor %} };
+  window.VAR_TARGETKEYS = ["RHOST", "RPORT", "DOMAIN", "USER", "PASS"];
+</script>
+<script src="{{ url_for('static', filename='js/home.js') }}"></script>
+{% endblock %}

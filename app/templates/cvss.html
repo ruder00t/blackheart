@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>{{ title }}{% if tag %} <span class="tag">{{ tag }}</span>{% endif %}</h2>
+    <p>Pick the metrics; the score, severity and vector string update live. Paste an existing vector to load it. Base is required — Temporal is optional (leave on “Not Defined”).</p>
+  </div>
+
+  <div class="cvss-wrap">
+    <div class="cvss-metrics">
+      <div class="card">
+        <h3>Base — Exploitability</h3>
+        <div class="cvss-metric" data-m="AV">
+          <label>Attack Vector (AV)</label>
+          <div class="seg cvss-seg">
+            <button data-val="N" class="on">Network</button>
+            <button data-val="A">Adjacent</button>
+            <button data-val="L">Local</button>
+            <button data-val="P">Physical</button>
+          </div>
+        </div>
+        <div class="cvss-metric" data-m="AC">
+          <label>Attack Complexity (AC)</label>
+          <div class="seg cvss-seg">
+            <button data-val="L" class="on">Low</button>
+            <button data-val="H">High</button>
+          </div>
+        </div>
+        <div class="cvss-metric" data-m="PR">
+          <label>Privileges Required (PR)</label>
+          <div class="seg cvss-seg">
+            <button data-val="N" class="on">None</button>
+            <button data-val="L">Low</button>
+            <button data-val="H">High</button>
+          </div>
+        </div>
+        <div class="cvss-metric" data-m="UI">
+          <label>User Interaction (UI)</label>
+          <div class="seg cvss-seg">
+            <button data-val="N" class="on">None</button>
+            <button data-val="R">Required</button>
+          </div>
+        </div>
+        <div class="cvss-metric" data-m="S">
+          <label>Scope (S)</label>
+          <div class="seg cvss-seg">
+            <button data-val="U" class="on">Unchanged</button>
+            <button data-val="C">Changed</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Base — Impact</h3>
+        <div class="cvss-metric" data-m="C">
+          <label>Confidentiality (C)</label>
+          <div class="seg cvss-seg">
+            <button data-val="H" class="on">High</button>
+            <button data-val="L">Low</button>
+            <button data-val="N">None</button>
+          </div>
+        </div>
+        <div class="cvss-metric" data-m="I">
+          <label>Integrity (I)</label>
+          <div class="seg cvss-seg">
+            <button data-val="H" class="on">High</button>
+            <button data-val="L">Low</button>
+            <button data-val="N">None</button>
+          </div>
+        </div>
+        <div class="cvss-metric" data-m="A">
+          <label>Availability (A)</label>
+          <div class="seg cvss-seg">
+            <button data-val="H" class="on">High</button>
+            <button data-val="L">Low</button>
+            <button data-val="N">None</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Temporal <span class="hint" style="font-weight:400">(optional)</span></h3>
+        <div class="cvss-metric" data-m="E">
+          <label>Exploit Code Maturity (E)</label>
+          <div class="seg cvss-seg">
+            <button data-val="X" class="on">Not Defined</button>
+            <button data-val="H">High</button>
+            <button data-val="F">Functional</button>
+            <button data-val="P">PoC</button>
+            <button data-val="U">Unproven</button>
+          </div>
+        </div>
+        <div class="cvss-metric" data-m="RL">
+          <label>Remediation Level (RL)</label>
+          <div class="seg cvss-seg">
+            <button data-val="X" class="on">Not Defined</button>
+            <button data-val="U">Unavailable</button>
+            <button data-val="W">Workaround</button>
+            <button data-val="T">Temp Fix</button>
+            <button data-val="O">Official Fix</button>
+          </div>
+        </div>
+        <div class="cvss-metric" data-m="RC">
+          <label>Report Confidence (RC)</label>
+          <div class="seg cvss-seg">
+            <button data-val="X" class="on">Not Defined</button>
+            <button data-val="C">Confirmed</button>
+            <button data-val="R">Reasonable</button>
+            <button data-val="U">Unknown</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cvss-out card">
+      <div class="cvss-score" id="cvssScore">0.0</div>
+      <div class="cvss-sev" id="cvssSev">None</div>
+      <div class="cvss-sub">
+        <span>Base</span><b id="cvssBase">0.0</b>
+        <span>Temporal</span><b id="cvssTemp">–</b>
+      </div>
+      <div class="cvss-vec cmd plain" id="cvssVec" data-raw=""></div>
+      <div class="cvss-parse">
+        <label>Load a vector string</label>
+        <input type="text" id="cvssParse" placeholder="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" spellcheck="false" autocomplete="off">
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/cvss.js') }}"></script>
+{% endblock %}

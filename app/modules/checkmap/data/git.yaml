@@ -1,0 +1,62 @@
+module: git
+name: Git daemon (9418)
+inputs: [OUT]
+
+sections:
+
+  - id: initial
+    name: Initial Access & Detection
+    steps:
+      - id: version
+        text: Confirm live / git protocol
+        commands: |
+          nmap -p$PORT -sV -sC $IP
+          nc -nv $IP $PORT
+
+  - id: enum
+    name: Repository Enumeration
+    steps:
+      - id: ls_remote
+        text: List refs of a repo (guess the repo name)
+        commands: |
+          git ls-remote git://$IP/
+          git ls-remote git://$IP/<repo>
+          git ls-remote git://$IP/<repo>.git
+      - id: guess_names
+        text: Common repo/path names to try
+        manual: true
+        commands: |
+          # try: repo, git, project, app, backup, .git, <hostname>, web
+
+  - id: access
+    name: Clone & Loot
+    steps:
+      - id: clone
+        text: Clone the exposed repository
+        commands: |
+          git clone git://$IP/<repo> $OUT/repo
+          git clone git://$IP/<repo>.git $OUT/repo
+      - id: history
+        text: Mine full history for secrets (deleted files live in history)
+        commands: |
+          cd $OUT/repo && git log --all --oneline
+          cd $OUT/repo && git log -p | grep -niE 'password|secret|api[_-]?key|token'
+      - id: secret_scan
+        text: Automated secret scanning
+        commands: |
+          gitleaks detect --source $OUT/repo -v
+          trufflehog filesystem $OUT/repo
+      - id: dangling
+        text: Recover dangling/uncommitted objects
+        manual: true
+        commands: |
+          cd $OUT/repo && git fsck --lost-found && git show <dangling-sha>
+
+  - id: notes
+    name: Notes
+    steps:
+      - id: writable
+        text: Note if the daemon allows push (receive-pack) — rare but critical
+        manual: true
+        commands: |
+          # git push git://$IP/<repo>  succeeding = code injection into the repo
