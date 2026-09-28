@@ -1,6 +1,13 @@
 # Blackheart
 
-## What it is
+<p align="center">
+  <img src="screenshots/blackheartlogo.png" width="300" alt="Blackheart logo">
+</p>
+
+> [!NOTE]
+> Current Blackheart version: Blackheart-V1.01
+
+## What it is; built for convenience
 
 Blackheart is an offline pentest command kit: a local Flask app that binds to
 `127.0.0.1:8090` and makes no external calls at runtime. It collects
@@ -9,9 +16,7 @@ with a shared set of engagement variables that substitute live into every
 command.
 
 > [!NOTE]
-> VersionCheck can refresh its latest-version cache from public registries, but
-> only on demand via its **Update now** button — it does **not** phone home at
-> startup. To restore automatic refresh on boot, set `BH_VERSIONCHECK_STARTUP=1`.
+> Blackheart is still in development. Suggestions and ideas for additions are welcome.
 
 It contains ~40 tabs grouped by engagement phase:
 
@@ -28,6 +33,13 @@ It contains ~40 tabs grouped by engagement phase:
 All state is plain JSON under `data/` (`vars.json`, `library.json`, etc.).
 Back up or move machines by copying that folder. The Additions tab also has
 explicit Export/Import JSON buttons.
+
+## Install
+
+   git clone https://github.com/ruder00t/blackheart.git
+   cd blackheart
+   ./install.sh      # Linux/macOS
+   ./run.sh          # then open http://127.0.0.1:8090
 
 ## What `install.sh` installs
 
@@ -79,15 +91,14 @@ click a tile to make it the send target; **blue** = empty/cleared, **green** =
 has output. Clearing a pane (`Ctrl+L`) returns its tile to blue.
 
 **Security:** the terminal endpoints shell out to `tmux send-keys` — arbitrary
-command execution wired to the web app. Two layers guard them: they refuse any
-non-loopback client (403), and they refuse cross-site requests (403, via
-`Sec-Fetch-Site`/`Origin` checks) so a page you visit in the browser can't
-drive-by them while Blackheart runs; state-changing routes also require a JSON
-content-type. `ttyd` is likewise bound to `127.0.0.1`. Do not expose Blackheart
-or ttyd's port on a routable interface.
+command execution wired to the web app. They are **localhost-only** and refuse
+any non-loopback request (403). `ttyd` is likewise bound to `127.0.0.1`. Do not
+expose Blackheart or ttyd's port on a routable interface.
 
-Run with `./run.sh` (Linux/macOS) or `run.bat` (Windows), then open
+Run with `./run.sh` (Linux/macOS), then open
 `http://127.0.0.1:8090`.
+
+`tmux attach` connects your kali terminal to the blackheart terminals.
 
 ## Usage — variables
 
@@ -116,3 +127,14 @@ tab substitutes them live (`$RHOST`, `$LHOST`, …). Values persist in
 
 CheckMap additionally uses per-scan `$IP` / `$PORT` inside a single service
 playbook; those are local to that tab and not part of the shared set above.
+
+![Blackheart interface](screenshots/screenshot1.png)
+
+Thanks a ton to:
+- Hacktricks (hacktricks.wiki)
+- Lolbas (lolbas-project.github.io)
+- GTFObins (gtfobins.github.io)
+- Revshells (revshells.com)
+- CyberChef (gchq.github.io/CyberChef)
+
+## License\nMIT — see [LICENSE](LICENSE).
