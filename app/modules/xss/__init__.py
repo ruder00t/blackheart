@@ -38,7 +38,7 @@ CARDS = [
 
 @bp.route("/xss")
 def index():
-    return render_template("cheat.html", active="xss",
+    return render_template("xss.html", active="xss",
                            title="Cross-site scripting", tag="exploitation",
                            intro="PoC payloads, exfiltration, and filter bypasses.",
                            cards=CARDS)

